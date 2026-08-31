@@ -20,6 +20,11 @@ app.use(cookieParser());
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Root fallback
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // --- Health Check Endpoint for Built-in Keep-Alive ---
 app.get('/api/health', (req, res) => {
   res.status(200).json({
@@ -51,7 +56,6 @@ function startAutonomousKeepAlive() {
 
   if (targetUrl) {
     console.log(`[KeepAlive] 24/7 Autonomous Self-Ping initialized for: ${targetUrl}`);
-    // Ping self every 10 minutes (600,000 ms) to keep cloud container awake 24/7
     setInterval(() => {
       try {
         const client = targetUrl.startsWith('https') ? https : http;
@@ -67,10 +71,10 @@ function startAutonomousKeepAlive() {
   }
 }
 
-// --- Start Server ---
-app.listen(PORT, () => {
+// --- Start Server (bind 0.0.0.0 for cloud environments) ---
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  Xerdown Server`);
-  console.log(`  Running on http://localhost:${PORT}`);
+  console.log(`  Running on http://0.0.0.0:${PORT}`);
   console.log(`  Created by Mayank Mandrai\n`);
   
   startAutonomousKeepAlive();
