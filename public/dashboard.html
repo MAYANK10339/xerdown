@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Xerdown</title>
+  <meta name="description" content="Manage your hosted files, monitor storage metrics, and generate secure distribution links with no file size limits.">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="liquid-grid-overlay"></div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="navbar-brand">
+        <span class="brand-icon" id="brand-icon"></span>
+        <span>Xer</span><span class="brand-accent">down</span>
+      </a>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+        <div class="navbar-user">
+          <span id="navbar-user-icon"></span>
+          <span id="navbar-username">User</span>
+        </div>
+        <button class="btn btn-ghost" id="logout-btn" aria-label="Logout">
+          <span id="logout-icon"></span>
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Dashboard Content -->
+  <main class="dashboard">
+    <div class="container">
+
+      <!-- Header -->
+      <div class="dashboard-header animate-fade-in">
+        <h1>Storage & Transfer Console</h1>
+        <p>Monitor storage usage, manage distribution links, and upload files with no size limits</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid animate-fade-in-up">
+        <div class="stat-card">
+          <div class="stat-icon" id="stat-files-icon"></div>
+          <div class="stat-info">
+            <h3 id="stat-files">—</h3>
+            <p>Total Files</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" id="stat-storage-icon"></div>
+          <div class="stat-info">
+            <h3 id="stat-storage">—</h3>
+            <p>Storage Consumed</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" id="stat-downloads-icon"></div>
+          <div class="stat-info">
+            <h3 id="stat-downloads">—</h3>
+            <p>Total Downloads</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Section -->
+      <div class="upload-section animate-fade-in-up">
+        <div class="upload-section-header">
+          <h2><span id="upload-header-icon"></span> File Ingestion Engine</h2>
+          <span class="hyperspeed-badge">Adaptive Parallel Streams · 100MB/s Turbo</span>
+        </div>
+
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="file-input" multiple>
+          <div class="upload-zone-content">
+            <div class="upload-icon" id="upload-zone-icon"></div>
+            <h3>Drag & drop files here or <span class="browse-text">browse local files</span></h3>
+            <p>No size limit · Upload any file size with adaptive parallel streaming and instant deduplication</p>
+          </div>
+        </div>
+
+        <div class="upload-progress-list" id="upload-progress-list"></div>
+      </div>
+
+      <!-- Files Section -->
+      <div class="files-section animate-fade-in-up">
+        <div class="files-section-header">
+          <h2><span id="files-header-icon"></span> Hosted Repositories</h2>
+          <span class="files-count" id="files-count">0 files</span>
+        </div>
+
+        <div class="files-table-wrapper" id="files-table-wrapper" style="display: none;">
+          <table class="files-table">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>Size</th>
+                <th>Downloads</th>
+                <th>Timestamp</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="files-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="files-empty">
+          <div class="empty-state-icon" id="empty-state-icon"></div>
+          <h3>No files currently hosted</h3>
+          <p>Drop a file above to begin high-speed distribution</p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>
+      Engineered by <a href="#">Mayank Mandrai</a> · Xerdown Platform
+    </p>
+  </footer>
+
+  <script src="/icons/icons.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/upload.js"></script>
+  <script src="/js/dashboard.js"></script>
+  <script>
+    document.getElementById('brand-icon').innerHTML = icon('bolt');
+    document.getElementById('navbar-user-icon').innerHTML = icon('user');
+    document.getElementById('logout-icon').innerHTML = icon('logout');
+    document.getElementById('stat-files-icon').innerHTML = icon('folder');
+    document.getElementById('stat-storage-icon').innerHTML = icon('storage');
+    document.getElementById('stat-downloads-icon').innerHTML = icon('download');
+    document.getElementById('upload-header-icon').innerHTML = icon('cloudUpload');
+    document.getElementById('upload-zone-icon').innerHTML = icon('cloudUpload');
+    document.getElementById('files-header-icon').innerHTML = icon('layers');
+    document.getElementById('empty-state-icon').innerHTML = icon('folder');
+  </script>
+</body>
+</html>

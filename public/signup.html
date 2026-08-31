@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account — Xerdown</title>
+  <meta name="description" content="Register a free Xerdown infrastructure account with no file size limits.">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="liquid-grid-overlay"></div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="navbar-brand">
+        <span class="brand-icon" id="brand-icon"></span>
+        <span>Xer</span><span class="brand-accent">down</span>
+      </a>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Signup Form -->
+  <main class="auth-page">
+    <div class="auth-card">
+      <div class="card">
+        <div class="auth-header">
+          <h1>Create Account</h1>
+          <p>Deploy and host files with no size limits</p>
+        </div>
+
+        <div id="auth-alert" class="auth-alert"></div>
+
+        <form id="signup-form" autocomplete="on">
+          <div class="form-group">
+            <label class="form-label" for="signup-username">Username</label>
+            <div class="form-input-wrapper">
+              <span class="input-icon" id="username-icon"></span>
+              <input
+                type="text"
+                id="signup-username"
+                class="form-input"
+                placeholder="Choose username"
+                autocomplete="username"
+                minlength="3"
+                required
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="signup-email">Email Address</label>
+            <div class="form-input-wrapper">
+              <span class="input-icon" id="email-icon"></span>
+              <input
+                type="email"
+                id="signup-email"
+                class="form-input"
+                placeholder="name@company.com"
+                autocomplete="email"
+                required
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="signup-password">Password</label>
+            <div class="form-input-wrapper">
+              <span class="input-icon" id="password-icon"></span>
+              <input
+                type="password"
+                id="signup-password"
+                class="form-input"
+                placeholder="Minimum 6 characters"
+                autocomplete="new-password"
+                minlength="6"
+                required
+              >
+              <button type="button" class="toggle-password" aria-label="Toggle password visibility" id="toggle-pw"></button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width:100%; margin-top: 8px;">
+            Create Account
+          </button>
+        </form>
+
+        <div class="auth-footer">
+          Already have an account? <a href="/login.html">Sign in here</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer auth-page-footer">
+      <p>
+        Engineered by <a href="#">Mayank Mandrai</a> · Xerdown Platform
+      </p>
+    </footer>
+  </main>
+
+  <script src="/icons/icons.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    document.getElementById('brand-icon').innerHTML = icon('bolt');
+    document.getElementById('username-icon').innerHTML = icon('user');
+    document.getElementById('email-icon').innerHTML = icon('mail');
+    document.getElementById('password-icon').innerHTML = icon('lock');
+    document.getElementById('toggle-pw').innerHTML = icon('eye');
+  </script>
+</body>
+</html>

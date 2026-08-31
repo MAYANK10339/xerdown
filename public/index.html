@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xerdown — Unlimited File Hosting & High-Speed Distribution</title>
+  <meta name="description" content="Enterprise-grade file hosting platform with zero size limits. Upload any file size at 100MB/s+ with parallel multi-stream architecture.">
+  <meta name="keywords" content="file hosting, no size limit, unlimited cloud storage, fast file sharing, xerdown">
+  <meta name="author" content="Mayank Mandrai">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="liquid-grid-overlay"></div>
+
+  <!-- Navbar -->
+  <nav class="navbar" id="navbar">
+    <div class="container">
+      <a href="/" class="navbar-brand">
+        <span class="brand-icon" id="brand-icon"></span>
+        <span>Xer</span><span class="brand-accent">down</span>
+      </a>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+        <a href="/login.html" class="btn btn-ghost" id="nav-login-btn">Sign In</a>
+        <a href="/dashboard.html" class="btn btn-primary btn-sm" id="nav-dashboard-btn" style="display:none;">Dashboard</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero" id="hero">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span id="hero-badge-icon"></span>
+        No Size Limit · 100MB/s Turbo Multi-Stream Engine
+      </div>
+      <h1>
+        Next-Generation Storage with<br>
+        <span class="gradient-text">Zero File Size Limits</span>
+      </h1>
+      <p>
+        Upload any file of any size with adaptive parallel streaming and instant deduplication.
+        100MB/s+ speeds for large files, 50MB/s+ for small files, and unrestricted bandwidth.
+      </p>
+      <div class="hero-actions">
+        <a href="/signup.html" class="btn btn-primary btn-lg" id="hero-cta">
+          <span id="hero-upload-icon"></span>
+          Start Uploading Free
+        </a>
+        <a href="#features" class="btn btn-secondary btn-lg">
+          <span id="hero-info-icon"></span>
+          Architecture
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="features-header">
+        <h2>High-Throughput File Infrastructure</h2>
+        <p>Engineered for maximum line-rate speed and zero storage bottlenecks.</p>
+      </div>
+      <div class="features-grid" id="features-grid"></div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>
+      Engineered by <a href="#">Mayank Mandrai</a> · Xerdown Platform
+    </p>
+  </footer>
+
+  <script src="/icons/icons.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    document.getElementById('brand-icon').innerHTML = icon('bolt');
+    document.getElementById('hero-badge-icon').innerHTML = icon('speed');
+    document.getElementById('hero-upload-icon').innerHTML = icon('cloudUpload');
+    document.getElementById('hero-info-icon').innerHTML = icon('info');
+
+    const features = [
+      {
+        icon: 'speed',
+        title: 'Adaptive Multi-Stream Engine',
+        desc: 'Files over 1GB transfer across 10 parallel TCP streams at 100MB/s+ peak rates. Smaller files use 6 parallel streams at 50MB/s+.'
+      },
+      {
+        icon: 'cloudUpload',
+        title: 'Zero File Size Limits',
+        desc: 'Upload files of any size without caps or restrictions. Direct disk stream piping ensures zero server memory exhaustion.'
+      },
+      {
+        icon: 'check',
+        title: 'Instant Deduplication',
+        desc: 'Fast-track fingerprint matching verifies pre-existing files on server and registers share links in under 20ms.'
+      },
+      {
+        icon: 'layers',
+        title: '16MB Buffer Streaming',
+        desc: 'Streaming downloads utilize 16MB highWaterMark buffers with HTTP Range byte-level resumption for multi-gigabit downloads.'
+      }
+    ];
+
+    const grid = document.getElementById('features-grid');
+    grid.innerHTML = features.map(f => `
+      <div class="feature-card">
+        <div class="feature-icon">${icon(f.icon)}</div>
+        <h3>${f.title}</h3>
+        <p>${f.desc}</p>
+      </div>
+    `).join('');
+
+    (async () => {
+      const user = await checkAuth();
+      if (user) {
+        document.getElementById('nav-login-btn').style.display = 'none';
+        document.getElementById('nav-dashboard-btn').style.display = 'inline-flex';
+        document.getElementById('hero-cta').href = '/dashboard.html';
+        document.getElementById('hero-cta').innerHTML = icon('dashboard') + ' Open Dashboard';
+      }
+    })();
+  </script>
+</body>
+</html>
