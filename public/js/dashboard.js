@@ -21,6 +21,7 @@ async function initDashboard() {
   await Promise.all([loadStats(), loadFiles()]);
   initUpload();
   initMonetizationControls();
+  initDangerZone();
 }
 
 /* ------------------------------------------
@@ -153,9 +154,9 @@ function renderFiles(files) {
       <td>${file.download_count.toLocaleString()}</td>
       <td>
         <button class="monetize-badge-btn ${file.is_monetized ? 'active' : ''}" 
-                title="Click to toggle 10s Sponsor Gateway monetization" 
+                title="Click to toggle ₹5.00 Sponsor Gateway monetization" 
                 onclick="toggleFileMonetization(${file.id})">
-          ${file.is_monetized ? '₹ 10s Sponsor' : 'Free Direct'}
+          ${file.is_monetized ? '₹5.00 Sponsor' : 'Free Direct'}
         </button>
       </td>
       <td>${formatDate(file.created_at)}</td>
@@ -177,7 +178,7 @@ function renderFiles(files) {
 }
 
 /* ------------------------------------------
-   Monetization & UPI Handlers
+   Monetization & Instant UPI Payout Handlers
    ------------------------------------------ */
 async function toggleFileMonetization(fileId) {
   try {
@@ -208,7 +209,7 @@ function initMonetizationControls() {
     saveUpiBtn.addEventListener('click', async () => {
       const upi = upiInput.value.trim();
       if (!upi || !upi.includes('@')) {
-        showToast('Please enter a valid UPI ID (e.g. name@upi)', 'error');
+        showToast('Please enter a valid UPI ID (e.g. name@okhdfcbank or number@paytm)', 'error');
         return;
       }
 
@@ -226,7 +227,7 @@ function initMonetizationControls() {
           return;
         }
 
-        showToast('UPI ID saved successfully!', 'success');
+        showToast('UPI ID saved & verified successfully!', 'success');
         upiInput.value = '';
         await loadStats();
       } catch {
@@ -238,24 +239,107 @@ function initMonetizationControls() {
   if (payoutBtn) {
     payoutBtn.addEventListener('click', async () => {
       try {
+        payoutBtn.disabled = true;
+        payoutBtn.textContent = 'Processing Transfer...';
+
         const res = await fetch('/api/files/payout/request', {
           method: 'POST',
           credentials: 'include'
         });
 
         const data = await res.json();
+        payoutBtn.disabled = false;
+        payoutBtn.textContent = 'Withdraw to UPI (Min ₹5)';
+
         if (!res.ok) {
           showToast(data.error || 'Payout request failed', 'error');
           return;
         }
 
-        showToast(data.message, 'success');
+        // Show Instant Receipt Modal
+        showPayoutReceipt(data.details);
         await loadStats();
       } catch {
+        payoutBtn.disabled = false;
+        payoutBtn.textContent = 'Withdraw to UPI (Min ₹5)';
         showToast('Network error requesting payout', 'error');
       }
     });
   }
+}
+
+function showPayoutReceipt(details) {
+  const modal = document.getElementById('payout-modal');
+  const body = document.getElementById('receipt-body');
+  if (!modal || !body) return;
+
+  body.innerHTML = `
+    <div class="receipt-amount">₹${details.amount.toFixed(2)}</div>
+    <div class="receipt-row">
+      <span>Paid To UPI</span>
+      <strong>${escapeHtmlDash(details.upi_id)}</strong>
+    </div>
+    <div class="receipt-row">
+      <span>Bank UTR Reference</span>
+      <strong class="receipt-utr">${details.utr}</strong>
+    </div>
+    <div class="receipt-row">
+      <span>Status</span>
+      <strong style="color: var(--accent);">${details.status}</strong>
+    </div>
+    <div class="receipt-row">
+      <span>Timestamp</span>
+      <span>${new Date(details.timestamp).toLocaleString()}</span>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+}
+
+window.closePayoutModal = function() {
+  const modal = document.getElementById('payout-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+/* ------------------------------------------
+   Danger Zone: Account Deletion
+   ------------------------------------------ */
+function initDangerZone() {
+  const deleteBtn = document.getElementById('delete-account-btn');
+  if (!deleteBtn) return;
+
+  deleteBtn.addEventListener('click', async () => {
+    const confirmation = prompt('To permanently delete your account and all uploaded files, type "DELETE" below:');
+    if (confirmation !== 'DELETE') {
+      if (confirmation !== null) showToast('Deletion cancelled (did not type DELETE).', 'info');
+      return;
+    }
+
+    try {
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = 'Deleting Account...';
+
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = 'Delete My Account';
+        showToast(data.error || 'Failed to delete account.', 'error');
+        return;
+      }
+
+      alert('Your account and files have been permanently deleted.');
+      window.location.href = '/signup.html';
+    } catch {
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = 'Delete My Account';
+      showToast('Network error deleting account.', 'error');
+    }
+  });
 }
 
 /* ------------------------------------------

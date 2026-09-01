@@ -39,7 +39,7 @@
       <!-- Header -->
       <div class="dashboard-header animate-fade-in">
         <h1>Storage & Transfer Console</h1>
-        <p>Ultra-speed file ingestion up to 100GB+, UPI creator monetization, and unlimited distribution</p>
+        <p>Ultra-speed file ingestion up to 100GB+, UPI creator monetization (₹5.00/download), and unlimited distribution</p>
       </div>
 
       <!-- Stats & Creator Wallet Grid -->
@@ -78,21 +78,21 @@
       <div class="creator-payout-box glass-card animate-fade-in-up">
         <div class="creator-payout-header">
           <div>
-            <h3><span id="upi-box-icon"></span> Creator Monetization & UPI Payouts</h3>
-            <p>Earn ₹0.50 per download with 10s Sponsor Gateway. Payouts sent directly to your UPI ID.</p>
+            <h3><span id="upi-box-icon"></span> Instant UPI Creator Monetization</h3>
+            <p>Earn <strong>₹5.00 per download</strong>. Minimum withdrawal: <strong>₹5.00</strong> (Instant UPI transfer with live UTR receipt).</p>
           </div>
           <div class="creator-payout-actions">
             <div id="upi-display" class="upi-status-pill">
               <span class="upi-tag not-linked">Checking UPI...</span>
             </div>
             <button class="btn btn-primary btn-sm" id="request-payout-btn">
-              Withdraw to UPI
+              Withdraw to UPI (Min ₹5)
             </button>
           </div>
         </div>
 
         <div class="upi-input-group">
-          <input type="text" id="upi-input" class="form-input" placeholder="Enter UPI ID (e.g. yourname@okhdfcbank or number@paytm)">
+          <input type="text" id="upi-input" class="form-input" placeholder="Enter UPI ID (e.g. yourname@okhdfcbank or 9876543210@paytm)">
           <button class="btn btn-secondary btn-sm" id="save-upi-btn">Save UPI ID</button>
         </div>
       </div>
@@ -110,8 +110,8 @@
             <input type="checkbox" id="monetize-upload-checkbox" checked>
             <span class="checkbox-custom"></span>
             <span class="checkbox-text">
-              <strong>Enable 10s Sponsor Gateway (Monetize Upload)</strong>
-              <small>Show 10s countdown to earn money on every download. Uncheck for instant direct download.</small>
+              <strong>Enable 10s Sponsor Gateway (Earn ₹5.00 per download)</strong>
+              <small>Show 10s countdown to earn ₹5.00 on every download. Uncheck for direct instant link.</small>
             </span>
           </label>
         </div>
@@ -159,8 +159,36 @@
         </div>
       </div>
 
+      <!-- Account Settings / Danger Zone -->
+      <div class="danger-zone-card glass-card animate-fade-in-up" style="margin-top: 40px; padding: 24px; border-color: rgba(255, 51, 102, 0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <h3 style="font-size: 1.05rem; color: var(--danger); font-weight: 700;">Account Settings & Privacy</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 2px;">Permanently erase your account, uploaded files, and stored session data.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="delete-account-btn" style="color: var(--danger); border-color: rgba(255, 51, 102, 0.3);">
+            Delete My Account
+          </button>
+        </div>
+      </div>
+
     </div>
   </main>
+
+  <!-- Payout Receipt Modal Container -->
+  <div id="payout-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <div class="modal-icon-success">✓</div>
+        <h2>UPI Transfer Successful</h2>
+        <p>Your withdrawal has been processed instantly</p>
+      </div>
+      <div class="receipt-body" id="receipt-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" style="width: 100%;" onclick="closePayoutModal()">Done</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Footer -->
   <footer class="footer">

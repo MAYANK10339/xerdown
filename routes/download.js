@@ -38,7 +38,7 @@ router.get('/:shareId/info', (req, res) => {
   }
 });
 
-// POST /api/download/:shareId/credit — Credit creator upon verified 10s ad completion
+// POST /api/download/:shareId/credit — Credit creator ₹5.00 upon verified 10s ad completion
 router.post('/:shareId/credit', (req, res) => {
   try {
     const file = db.prepare('SELECT id, user_id, is_monetized FROM files WHERE share_id = ?').get(req.params.shareId);
@@ -48,12 +48,12 @@ router.post('/:shareId/credit', (req, res) => {
     }
 
     if (file.is_monetized === 1) {
-      // Credit ₹0.50 (50 paise per valid download) to creator balance
-      const rewardAmount = 0.50;
+      // Credit ₹5.00 per valid download to creator balance
+      const rewardAmount = 5.00;
       db.prepare('UPDATE users SET earnings = earnings + ? WHERE id = ?').run(rewardAmount, file.user_id);
     }
 
-    res.json({ success: true });
+    res.json({ success: true, reward: 5.00 });
   } catch (err) {
     console.error('Credit error:', err);
     res.status(500).json({ error: 'Credit recording failed.' });

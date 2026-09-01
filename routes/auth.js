@@ -1,10 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/db');
 const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
+const uploadsDir = path.join(__dirname, '..', 'uploads');
 
 // Safe JWT Secret with built-in robust fallback
 const JWT_SECRET = process.env.JWT_SECRET || 'xerdown_super_secure_jwt_fallback_secret_key_2026_x89q2';
@@ -125,11 +128,42 @@ router.post('/logout', (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT id, username, email, storage_used, created_at FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, username, email, storage_used, upi_id, earnings, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) {
     return res.status(404).json({ error: 'User not found.' });
   }
   res.json({ user });
+});
+
+// DELETE /api/auth/delete-account — Permanently delete user account and files
+router.delete('/delete-account', authMiddleware, (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Delete all user files from disk
+    const userFiles = db.prepare('SELECT stored_name FROM files WHERE user_id = ?').all(userId);
+    for (const file of userFiles) {
+      const diskPath = path.join(uploadsDir, file.stored_name);
+      if (fs.existsSync(diskPath)) {
+        try { fs.unlinkSync(diskPath); } catch (e) {}
+      }
+    }
+
+    // 2. Delete database records
+    db.transaction(() => {
+      db.prepare('DELETE FROM files WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM payouts WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    })();
+
+    // 3. Clear session cookie
+    res.clearCookie('xerdown_token');
+
+    res.json({ message: 'Your account and all associated files have been permanently deleted.' });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    res.status(500).json({ error: 'Failed to delete account. Please try again.' });
+  }
 });
 
 module.exports = router;
