@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — Xerdown</title>
-  <meta name="description" content="Manage your hosted files, monitor storage metrics, earnings, and generate distribution links with no file size limits.">
+  <meta name="description" content="Manage your hosted files, monitor storage metrics, and generate distribution links with customizable download delays and no file size limits.">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -20,9 +20,6 @@
       </a>
       <div class="navbar-actions">
         <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
-        <a href="/admin.html" class="btn btn-secondary btn-sm" title="Admin Payout Settlements Console">
-          Admin Payouts
-        </a>
         <div class="navbar-user">
           <span id="navbar-user-icon"></span>
           <span id="navbar-username">User</span>
@@ -42,10 +39,10 @@
       <!-- Header -->
       <div class="dashboard-header animate-fade-in">
         <h1>Storage & Transfer Console</h1>
-        <p>Ultra-speed file ingestion up to 100GB+, UPI creator monetization (₹5.00/download), and unlimited distribution</p>
+        <p>Ultra-speed file ingestion up to 100GB+, customizable download delays, and unrestricted bandwidth</p>
       </div>
 
-      <!-- Stats & Creator Wallet Grid -->
+      <!-- Stats Grid -->
       <div class="stats-grid animate-fade-in-up">
         <div class="stat-card">
           <div class="stat-icon" id="stat-files-icon"></div>
@@ -68,36 +65,6 @@
             <p>Total Downloads</p>
           </div>
         </div>
-        <div class="stat-card earnings-card">
-          <div class="stat-icon" id="stat-earnings-icon"></div>
-          <div class="stat-info">
-            <h3 id="stat-earnings" class="gradient-text">₹0.00</h3>
-            <p>Creator Earnings (UPI)</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Creator UPI & Payout Section -->
-      <div class="creator-payout-box glass-card animate-fade-in-up">
-        <div class="creator-payout-header">
-          <div>
-            <h3><span id="upi-box-icon"></span> Instant UPI Creator Monetization</h3>
-            <p>Earn <strong>₹5.00 per download</strong>. Minimum withdrawal: <strong>₹5.00</strong> (Instant UPI transfer with live UTR receipt).</p>
-          </div>
-          <div class="creator-payout-actions">
-            <div id="upi-display" class="upi-status-pill">
-              <span class="upi-tag not-linked">Checking UPI...</span>
-            </div>
-            <button class="btn btn-primary btn-sm" id="request-payout-btn">
-              Withdraw to UPI (Min ₹5)
-            </button>
-          </div>
-        </div>
-
-        <div class="upi-input-group">
-          <input type="text" id="upi-input" class="form-input" placeholder="Enter UPI ID (e.g. yourname@okhdfcbank or 9876543210@paytm)">
-          <button class="btn btn-secondary btn-sm" id="save-upi-btn">Save UPI ID</button>
-        </div>
       </div>
 
       <!-- Upload Section -->
@@ -107,16 +74,23 @@
           <span class="hyperspeed-badge">16x Parallel Streams · Up to 100GB+</span>
         </div>
 
-        <!-- Monetization Checkbox for Upload -->
-        <div class="monetize-upload-bar glass-card">
-          <label class="custom-checkbox-label" for="monetize-upload-checkbox">
-            <input type="checkbox" id="monetize-upload-checkbox" checked>
-            <span class="checkbox-custom"></span>
-            <span class="checkbox-text">
-              <strong>Enable 10s Sponsor Gateway (Earn ₹5.00 per download)</strong>
-              <small>Show 10s countdown to earn ₹5.00 on every download. Uncheck for direct instant link.</small>
-            </span>
-          </label>
+        <!-- Download Wait Timer Control Bar -->
+        <div class="timer-control-bar glass-card">
+          <div class="timer-control-wrapper">
+            <label for="upload-timer-select">
+              <span id="timer-icon"></span>
+              <strong>Download Delay Timer:</strong>
+            </label>
+            <select id="upload-timer-select" class="form-select">
+              <option value="0" selected>Instant (0s — No Delay)</option>
+              <option value="5">5 Seconds Delay</option>
+              <option value="10">10 Seconds Delay</option>
+              <option value="15">15 Seconds Delay</option>
+              <option value="30">30 Seconds Delay</option>
+              <option value="60">60 Seconds Delay</option>
+            </select>
+            <span class="timer-hint">Choose whether downloads start instantly or after a countdown timer.</span>
+          </div>
         </div>
 
         <div class="upload-zone" id="upload-zone">
@@ -145,7 +119,7 @@
                 <th>File Name</th>
                 <th>Size</th>
                 <th>Downloads</th>
-                <th>Monetization</th>
+                <th>Download Timer</th>
                 <th>Timestamp</th>
                 <th>Actions</th>
               </tr>
@@ -158,7 +132,7 @@
         <div class="empty-state" id="files-empty">
           <div class="empty-state-icon" id="empty-state-icon"></div>
           <h3>No files currently hosted</h3>
-          <p>Drop a file above to begin high-speed distribution & monetization</p>
+          <p>Drop a file above to begin high-speed distribution</p>
         </div>
       </div>
 
@@ -178,21 +152,6 @@
     </div>
   </main>
 
-  <!-- Payout Receipt Modal Container -->
-  <div id="payout-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-card glass-card">
-      <div class="modal-header">
-        <div class="modal-icon-success">✓</div>
-        <h2>UPI Transfer Successful</h2>
-        <p>Your withdrawal has been processed instantly</p>
-      </div>
-      <div class="receipt-body" id="receipt-body"></div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" style="width: 100%;" onclick="closePayoutModal()">Done</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Footer -->
   <footer class="footer">
     <p>
@@ -211,8 +170,7 @@
     document.getElementById('stat-files-icon').innerHTML = icon('folder');
     document.getElementById('stat-storage-icon').innerHTML = icon('storage');
     document.getElementById('stat-downloads-icon').innerHTML = icon('download');
-    document.getElementById('stat-earnings-icon').innerHTML = icon('sparkles');
-    document.getElementById('upi-box-icon').innerHTML = icon('bolt');
+    document.getElementById('timer-icon').innerHTML = icon('sparkles');
     document.getElementById('upload-header-icon').innerHTML = icon('cloudUpload');
     document.getElementById('upload-zone-icon').innerHTML = icon('cloudUpload');
     document.getElementById('files-header-icon').innerHTML = icon('layers');

@@ -1,11 +1,9 @@
 /* ==========================================================
-   XERDOWN — Dashboard Logic with Creator Monetization & UPI
+   XERDOWN — Dashboard Logic with Customizable Download Timers
    ========================================================== */
 
 let currentUser = null;
 let uploadEngine = null;
-let currentUpiId = null;
-let currentEarnings = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
   initDashboard();
@@ -22,12 +20,11 @@ async function initDashboard() {
 
   await Promise.all([loadStats(), loadFiles()]);
   initUpload();
-  initMonetizationControls();
   initDangerZone();
 }
 
 /* ------------------------------------------
-   Stats & Creator Wallet
+   Stats
    ------------------------------------------ */
 async function loadStats() {
   try {
@@ -38,33 +35,17 @@ async function loadStats() {
     const elFiles = document.getElementById('stat-files');
     const elStorage = document.getElementById('stat-storage');
     const elDownloads = document.getElementById('stat-downloads');
-    const elEarnings = document.getElementById('stat-earnings');
-    const elUpiDisplay = document.getElementById('upi-display');
-    const upiInput = document.getElementById('upi-input');
-
-    currentEarnings = data.earnings || 0.0;
-    currentUpiId = data.upi_id || null;
 
     if (elFiles) elFiles.textContent = data.total_files.toLocaleString();
     if (elStorage) elStorage.textContent = formatBytes(data.total_size);
     if (elDownloads) elDownloads.textContent = data.total_downloads.toLocaleString();
-    if (elEarnings) elEarnings.textContent = `₹${currentEarnings.toFixed(2)}`;
-
-    if (elUpiDisplay) {
-      if (currentUpiId) {
-        elUpiDisplay.innerHTML = `<span class="upi-tag">✓ Linked: ${escapeHtmlDash(currentUpiId)}</span>`;
-        if (upiInput && !upiInput.value) upiInput.value = currentUpiId;
-      } else {
-        elUpiDisplay.innerHTML = `<span class="upi-tag not-linked">Not Linked</span>`;
-      }
-    }
   } catch (err) {
     console.error('Stats load error:', err);
   }
 }
 
 /* ------------------------------------------
-   Upload Zone with Monetization Toggle
+   Upload Zone with Configurable Timer
    ------------------------------------------ */
 function initUpload() {
   const zone = document.getElementById('upload-zone');
@@ -72,8 +53,8 @@ function initUpload() {
   const progressList = document.getElementById('upload-progress-list');
 
   uploadEngine = new UploadEngine({
-    onFileStart(id, file, isMonetized) {
-      const item = createProgressItem(id, file, isMonetized);
+    onFileStart(id, file, downloadTimer) {
+      const item = createProgressItem(id, file, downloadTimer);
       progressList.prepend(item);
     },
 
@@ -108,13 +89,13 @@ function initUpload() {
     }
   });
 
-  initUploadZone(zone, input, (files, isMonetized) => {
-    uploadEngine.uploadFiles(files, isMonetized);
+  initUploadZone(zone, input, (files, downloadTimer) => {
+    uploadEngine.uploadFiles(files, downloadTimer);
   });
 }
 
 /* ------------------------------------------
-   Files List & Monetization Toggle
+   Files List & Timer Configuration
    ------------------------------------------ */
 async function loadFiles() {
   try {
@@ -149,183 +130,76 @@ function renderFiles(files) {
   if (tableWrapper) tableWrapper.style.display = 'block';
   if (emptyState) emptyState.style.display = 'none';
 
-  tbody.innerHTML = files.map(file => `
-    <tr data-file-id="${file.id}">
-      <td>
-        <div class="file-name-cell">
-          <div class="file-type-icon">${fileTypeIcon(file.mime_type)}</div>
-          <span class="file-name-text" title="${escapeAttr(file.original_name)}">${escapeHtmlDash(file.original_name)}</span>
-        </div>
-      </td>
-      <td>${formatBytes(file.size)}</td>
-      <td>${file.download_count.toLocaleString()}</td>
-      <td>
-        <button class="monetize-badge-btn ${file.is_monetized ? 'active' : ''}" 
-                title="Click to toggle ₹5.00 Sponsor Gateway monetization" 
-                onclick="toggleFileMonetization(${file.id})">
-          ${file.is_monetized ? '₹5.00 Sponsor' : 'Free Direct'}
-        </button>
-      </td>
-      <td>${formatDate(file.created_at)}</td>
-      <td>
-        <div class="file-actions">
-          <button class="btn-icon" title="Copy share link" onclick="copyShareLink('${file.share_id}', this)">
-            ${icon('copy')}
+  tbody.innerHTML = files.map(file => {
+    const timer = parseInt(file.download_timer, 10) || 0;
+    const timerText = timer === 0 ? 'Instant (0s)' : `${timer}s Delay`;
+    const isTimerActive = timer > 0;
+
+    return `
+      <tr data-file-id="${file.id}">
+        <td>
+          <div class="file-name-cell">
+            <div class="file-type-icon">${fileTypeIcon(file.mime_type)}</div>
+            <span class="file-name-text" title="${escapeAttr(file.original_name)}">${escapeHtmlDash(file.original_name)}</span>
+          </div>
+        </td>
+        <td>${formatBytes(file.size)}</td>
+        <td>${file.download_count.toLocaleString()}</td>
+        <td>
+          <button class="timer-badge-btn ${isTimerActive ? 'active' : ''}" 
+                  title="Click to change download delay seconds" 
+                  onclick="changeFileTimer(${file.id}, ${timer})">
+            ⏱️ ${timerText}
           </button>
-          <a href="/d/${file.share_id}" target="_blank" class="btn-icon" title="Open download page">
-            ${icon('externalLink')}
-          </a>
-          <button class="btn-icon" title="Delete file" onclick="deleteFile(${file.id}, '${escapeAttr(file.original_name)}')">
-            ${icon('trash')}
-          </button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+        </td>
+        <td>${formatDate(file.created_at)}</td>
+        <td>
+          <div class="file-actions">
+            <button class="btn-icon" title="Copy share link" onclick="copyShareLink('${file.share_id}', this)">
+              ${icon('copy')}
+            </button>
+            <a href="/d/${file.share_id}" target="_blank" class="btn-icon" title="Open download page">
+              ${icon('externalLink')}
+            </a>
+            <button class="btn-icon" title="Delete file" onclick="deleteFile(${file.id}, '${escapeAttr(file.original_name)}')">
+              ${icon('trash')}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 /* ------------------------------------------
-   Monetization & Instant UPI Payout Handlers
+   Change File Timer
    ------------------------------------------ */
-async function toggleFileMonetization(fileId) {
+async function changeFileTimer(fileId, currentSeconds) {
+  const input = prompt('Enter download delay in seconds (Enter 0 for Instant Direct Download):', currentSeconds);
+  if (input === null) return;
+
+  const seconds = Math.max(0, parseInt(input, 10) || 0);
+
   try {
-    const res = await fetch(`/api/files/${fileId}/monetize`, {
+    const res = await fetch(`/api/files/${fileId}/timer`, {
       method: 'PATCH',
-      credentials: 'include'
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ seconds })
     });
 
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.error || 'Failed to update monetization.', 'error');
+      showToast(data.error || 'Failed to update timer.', 'error');
       return;
     }
 
     showToast(data.message, 'success');
     await loadFiles();
   } catch (err) {
-    showToast('Network error updating monetization.', 'error');
+    showToast('Network error updating timer.', 'error');
   }
 }
-
-function initMonetizationControls() {
-  const saveUpiBtn = document.getElementById('save-upi-btn');
-  const upiInput = document.getElementById('upi-input');
-  const payoutBtn = document.getElementById('request-payout-btn');
-
-  if (saveUpiBtn && upiInput) {
-    saveUpiBtn.addEventListener('click', async () => {
-      const upi = upiInput.value.trim();
-      if (!upi || !upi.includes('@')) {
-        showToast('Please enter a valid UPI ID (e.g. yourname@okhdfcbank or 9876543210@paytm)', 'error');
-        upiInput.focus();
-        return;
-      }
-
-      try {
-        saveUpiBtn.disabled = true;
-        saveUpiBtn.textContent = 'Saving...';
-
-        const res = await fetch('/api/files/settings/upi', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ upi_id: upi })
-        });
-
-        const data = await res.json();
-        saveUpiBtn.disabled = false;
-        saveUpiBtn.textContent = 'Save UPI ID';
-
-        if (!res.ok) {
-          showToast(data.error || 'Failed to save UPI ID', 'error');
-          return;
-        }
-
-        showToast('UPI ID saved & verified successfully!', 'success');
-        await loadStats();
-      } catch {
-        saveUpiBtn.disabled = false;
-        saveUpiBtn.textContent = 'Save UPI ID';
-        showToast('Network error saving UPI ID', 'error');
-      }
-    });
-  }
-
-  if (payoutBtn) {
-    payoutBtn.addEventListener('click', async () => {
-      if (!currentUpiId) {
-        showToast('Please enter and save your UPI ID above first!', 'error');
-        if (upiInput) upiInput.focus();
-        return;
-      }
-
-      if (currentEarnings < 5) {
-        showToast(`Minimum withdrawal is ₹5.00. Current earnings: ₹${currentEarnings.toFixed(2)}. Share your monetized link to earn ₹5.00/download!`, 'error');
-        return;
-      }
-
-      try {
-        payoutBtn.disabled = true;
-        payoutBtn.textContent = 'Processing Transfer...';
-
-        const res = await fetch('/api/files/payout/request', {
-          method: 'POST',
-          credentials: 'include'
-        });
-
-        const data = await res.json();
-        payoutBtn.disabled = false;
-        payoutBtn.textContent = 'Withdraw to UPI (Min ₹5)';
-
-        if (!res.ok) {
-          showToast(data.error || 'Payout request failed', 'error');
-          return;
-        }
-
-        // Show Instant Receipt Modal
-        showPayoutReceipt(data.details);
-        await loadStats();
-      } catch {
-        payoutBtn.disabled = false;
-        payoutBtn.textContent = 'Withdraw to UPI (Min ₹5)';
-        showToast('Network error requesting payout', 'error');
-      }
-    });
-  }
-}
-
-function showPayoutReceipt(details) {
-  const modal = document.getElementById('payout-modal');
-  const body = document.getElementById('receipt-body');
-  if (!modal || !body) return;
-
-  body.innerHTML = `
-    <div class="receipt-amount">₹${details.amount.toFixed(2)}</div>
-    <div class="receipt-row">
-      <span>Paid To UPI</span>
-      <strong>${escapeHtmlDash(details.upi_id)}</strong>
-    </div>
-    <div class="receipt-row">
-      <span>Bank UTR Reference</span>
-      <strong class="receipt-utr">${details.utr}</strong>
-    </div>
-    <div class="receipt-row">
-      <span>Status</span>
-      <strong style="color: var(--accent);">${details.status}</strong>
-    </div>
-    <div class="receipt-row">
-      <span>Timestamp</span>
-      <span>${new Date(details.timestamp).toLocaleString()}</span>
-    </div>
-  `;
-
-  modal.style.display = 'flex';
-}
-
-window.closePayoutModal = function() {
-  const modal = document.getElementById('payout-modal');
-  if (modal) modal.style.display = 'none';
-};
 
 /* ------------------------------------------
    Danger Zone: Account Deletion

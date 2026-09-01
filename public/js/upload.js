@@ -1,7 +1,7 @@
 /* ==========================================================
    XERDOWN — Ultra-Concurrency Parallel Streaming Engine
    Supports: 100MB - 100GB+ Files with 16 Parallel Streams,
-   Instant Deduplication (0.01s), and Monetization Flagging.
+   Instant Deduplication (0.01s), and Custom Download Timer.
    ========================================================== */
 
 class UploadEngine {
@@ -22,18 +22,18 @@ class UploadEngine {
   }
 
   /**
-   * Queue files for upload with optional monetization flag
+   * Queue files for upload with optional download wait timer (seconds)
    */
-  uploadFiles(files, isMonetized = false) {
+  uploadFiles(files, downloadTimer = 0) {
     const ids = [];
     const fileArray = Array.from(files);
     this.totalFiles += fileArray.length;
 
     for (const file of fileArray) {
       const id = `upload-${++this._idCounter}-${Date.now()}`;
-      this.queue.push({ id, file, isMonetized });
+      this.queue.push({ id, file, downloadTimer });
       ids.push(id);
-      this.onFileStart(id, file, isMonetized);
+      this.onFileStart(id, file, downloadTimer);
     }
 
     this._processQueue();
@@ -72,7 +72,7 @@ class UploadEngine {
 
   /** @private */
   async _startUploadTask(item) {
-    const { id, file, isMonetized } = item;
+    const { id, file, downloadTimer } = item;
 
     // 1. Instant Deduplication Fast-Track Check (< 0.02s)
     try {
@@ -84,7 +84,7 @@ class UploadEngine {
           originalName: file.name,
           size: file.size,
           mimeType: file.type,
-          isMonetized: isMonetized ? 1 : 0
+          downloadTimer: downloadTimer || 0
         })
       });
 
@@ -122,7 +122,7 @@ class UploadEngine {
    * Fast standard upload for small files (<= 10MB)
    * @private
    */
-  _startStandardUpload({ id, file, isMonetized }) {
+  _startStandardUpload({ id, file, downloadTimer }) {
     const xhr = new XMLHttpRequest();
     const startTime = Date.now();
     let lastLoaded = 0;
@@ -134,7 +134,7 @@ class UploadEngine {
 
     const formData = new FormData();
     formData.append('files', file);
-    formData.append('isMonetized', isMonetized ? '1' : '0');
+    formData.append('downloadTimer', (downloadTimer || 0).toString());
 
     xhr.open('POST', '/api/files/upload');
     xhr.withCredentials = true;
@@ -209,12 +209,11 @@ class UploadEngine {
    * Ultra-Concurrency Parallel Chunked Upload for massive files (100MB - 100GB+)
    * @private
    */
-  async _startChunkedUpload({ id, file, isMonetized }) {
+  async _startChunkedUpload({ id, file, downloadTimer }) {
     const totalSize = file.size;
     const isHuge = totalSize >= 5 * 1024 * 1024 * 1024; // >= 5GB
     const isLarge = totalSize >= 1024 * 1024 * 1024; // >= 1GB
 
-    // Dynamic chunk sizing & worker pool
     const chunkSize = isHuge ? 64 * 1024 * 1024 : (isLarge ? 40 * 1024 * 1024 : 16 * 1024 * 1024);
     const maxWorkers = isHuge ? 16 : (isLarge ? 12 : 8);
 
@@ -241,7 +240,7 @@ class UploadEngine {
           mimeType: file.type || 'application/octet-stream',
           totalSize,
           totalChunks,
-          isMonetized: isMonetized ? 1 : 0
+          downloadTimer: downloadTimer || 0
         })
       });
 
@@ -399,13 +398,13 @@ class UploadEngine {
 }
 
 /**
- * Drag & drop init
+ * Drag & drop init with Download Timer selector
  */
 function initUploadZone(zone, input, onFiles) {
   if (!zone || !input) return;
 
   zone.addEventListener('click', (e) => {
-    if (e.target.tagName !== 'INPUT' && !e.target.closest('.monetize-toggle-wrapper')) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && !e.target.closest('.timer-control-wrapper')) {
       input.click();
     }
   });
@@ -437,17 +436,17 @@ function initUploadZone(zone, input, onFiles) {
     zone.classList.remove('drag-over');
 
     if (e.dataTransfer.files.length > 0) {
-      const monetizeCheckbox = document.getElementById('monetize-upload-checkbox');
-      const isMonetized = monetizeCheckbox ? monetizeCheckbox.checked : false;
-      onFiles(e.dataTransfer.files, isMonetized);
+      const timerSelect = document.getElementById('upload-timer-select');
+      const timerValue = timerSelect ? parseInt(timerSelect.value, 10) : 0;
+      onFiles(e.dataTransfer.files, timerValue);
     }
   });
 
   input.addEventListener('change', () => {
     if (input.files.length > 0) {
-      const monetizeCheckbox = document.getElementById('monetize-upload-checkbox');
-      const isMonetized = monetizeCheckbox ? monetizeCheckbox.checked : false;
-      onFiles(input.files, isMonetized);
+      const timerSelect = document.getElementById('upload-timer-select');
+      const timerValue = timerSelect ? parseInt(timerSelect.value, 10) : 0;
+      onFiles(input.files, timerValue);
       input.value = '';
     }
   });
@@ -456,7 +455,7 @@ function initUploadZone(zone, input, onFiles) {
 /**
  * Create progress item
  */
-function createProgressItem(id, file, isMonetized) {
+function createProgressItem(id, file, downloadTimer) {
   const item = document.createElement('div');
   item.className = 'upload-progress-item glass-card';
   item.id = `progress-${id}`;
@@ -470,8 +469,10 @@ function createProgressItem(id, file, isMonetized) {
     badges += '<span class="hyperspeed-badge">8x Stream</span>';
   }
 
-  if (isMonetized) {
-    badges += '<span class="monetized-badge">Monetized 10s</span>';
+  if (downloadTimer > 0) {
+    badges += `<span class="timer-badge">${downloadTimer}s Delay</span>`;
+  } else {
+    badges += `<span class="instant-badge">Instant 0s</span>`;
   }
 
   item.innerHTML = `

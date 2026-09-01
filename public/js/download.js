@@ -1,5 +1,6 @@
 /* ==========================================================
-   XERDOWN — Public Download Engine with 10s Sponsor Gateway
+   XERDOWN — Public High-Speed Download Engine
+   Supports: Instant Direct Download & Custom Security Countdown.
    ========================================================== */
 
 let countdownTimer = null;
@@ -43,17 +44,19 @@ function renderFileInfo(file, shareId) {
   const content = document.getElementById('download-content');
   if (!content) return;
 
-  if (file.is_monetized) {
-    // 10-Second Sponsor Gateway Screen
-    renderMonetizedGateway(file, shareId, content);
+  const timerSeconds = parseInt(file.download_timer, 10) || 0;
+
+  if (timerSeconds > 0) {
+    // Custom Countdown Security Screen
+    renderCountdownDownload(file, shareId, content, timerSeconds);
   } else {
-    // Direct Instant Download Screen
+    // Direct Instant Download Screen (0s delay)
     renderDirectDownload(file, shareId, content);
   }
 }
 
 /**
- * Direct Instant Download (Zero Waiting)
+ * Direct Instant Download (0s Delay / Zero Waiting)
  */
 function renderDirectDownload(file, shareId, container) {
   container.innerHTML = `
@@ -78,7 +81,7 @@ function renderDirectDownload(file, shareId, container) {
     <div class="download-btn-wrapper">
       <button id="download-btn" class="btn btn-primary btn-lg" onclick="startDownload('${shareId}', '${escapeHtml(file.original_name)}')">
         ${icon('download')}
-        Direct Download File
+        Instant Download File
       </button>
     </div>
     <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 14px;">
@@ -88,10 +91,10 @@ function renderDirectDownload(file, shareId, container) {
 }
 
 /**
- * 10-Second Sponsor Gateway with Real-time Circular Countdown & Earnings Credit
+ * Custom Security Countdown Delay (User-Configured Seconds)
  */
-function renderMonetizedGateway(file, shareId, container) {
-  let secondsLeft = file.ad_timer || 10;
+function renderCountdownDownload(file, shareId, container, initialSeconds) {
+  let secondsLeft = initialSeconds;
 
   container.innerHTML = `
     <div class="download-file-icon">
@@ -110,40 +113,30 @@ function renderMonetizedGateway(file, shareId, container) {
       </div>
     </div>
 
-    <!-- Sponsor / Ad Banner Slot -->
-    <div class="sponsor-gateway-card">
-      <div class="sponsor-badge">Verified Sponsor Gateway</div>
-      <div class="sponsor-content">
-        <h4>High-Speed Cloud Distribution</h4>
-        <p>Your secure download link is being generated through high-bandwidth line servers.</p>
-      </div>
-    </div>
-
     <!-- Liquid Countdown Timer -->
-    <div class="countdown-wrapper">
+    <div class="countdown-wrapper" style="margin-top: 10px;">
       <div class="countdown-circle">
         <span id="countdown-number">${secondsLeft}</span>
       </div>
-      <p id="countdown-status" class="countdown-status">Generating secure download link...</p>
+      <p id="countdown-status" class="countdown-status">Generating verified download stream...</p>
     </div>
 
-    <div class="download-btn-wrapper">
+    <div class="download-btn-wrapper" style="margin-top: 18px;">
       <button id="download-btn" class="btn btn-primary btn-lg" disabled style="opacity: 0.5; cursor: not-allowed;">
         <span class="spinner"></span> Please wait ${secondsLeft}s
       </button>
     </div>
 
-    <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 12px;">
-      Creator support enabled · Download unlocks automatically
+    <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 14px;">
+      High-bandwidth line streaming unlocks automatically
     </p>
   `;
 
-  // Start 10-Second Timer
   const countdownEl = document.getElementById('countdown-number');
   const statusEl = document.getElementById('countdown-status');
   const btnEl = document.getElementById('download-btn');
 
-  countdownTimer = setInterval(async () => {
+  countdownTimer = setInterval(() => {
     secondsLeft--;
     if (countdownEl) countdownEl.textContent = secondsLeft;
     if (btnEl) btnEl.innerHTML = `<span class="spinner"></span> Please wait ${secondsLeft}s`;
@@ -151,14 +144,9 @@ function renderMonetizedGateway(file, shareId, container) {
     if (secondsLeft <= 0) {
       clearInterval(countdownTimer);
 
-      // Credit creator's UPI wallet balance
-      try {
-        fetch(`/api/download/${shareId}/credit`, { method: 'POST' });
-      } catch (e) {}
-
       if (countdownEl) countdownEl.textContent = '✓';
       if (statusEl) {
-        statusEl.textContent = 'Link generated! Click below to download.';
+        statusEl.textContent = 'Download ready! Click below to begin.';
         statusEl.style.color = 'var(--accent)';
       }
 
@@ -166,7 +154,7 @@ function renderMonetizedGateway(file, shareId, container) {
         btnEl.disabled = false;
         btnEl.style.opacity = '1';
         btnEl.style.cursor = 'pointer';
-        btnEl.innerHTML = `${icon('download')} Unlock & Download File`;
+        btnEl.innerHTML = `${icon('download')} Download File Now`;
         btnEl.onclick = () => startDownload(shareId, file.original_name);
       }
     }

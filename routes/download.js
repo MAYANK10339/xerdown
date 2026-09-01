@@ -6,11 +6,11 @@ const db = require('../config/db');
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 
-// GET /api/download/:shareId/info — File metadata + Monetization check
+// GET /api/download/:shareId/info — File metadata + Download wait timer
 router.get('/:shareId/info', (req, res) => {
   try {
     const file = db.prepare(`
-      SELECT f.original_name, f.mime_type, f.size, f.download_count, f.is_monetized, f.ad_timer, f.created_at, u.username as creator_name
+      SELECT f.original_name, f.mime_type, f.size, f.download_count, f.download_timer, f.created_at, u.username as creator_name
       FROM files f
       JOIN users u ON f.user_id = u.id
       WHERE f.share_id = ?
@@ -26,8 +26,7 @@ router.get('/:shareId/info', (req, res) => {
         mime_type: file.mime_type,
         size: file.size,
         download_count: file.download_count,
-        is_monetized: file.is_monetized === 1,
-        ad_timer: file.ad_timer || 10,
+        download_timer: file.download_timer || 0,
         creator_name: file.creator_name,
         created_at: file.created_at
       }
@@ -35,28 +34,6 @@ router.get('/:shareId/info', (req, res) => {
   } catch (err) {
     console.error('File info error:', err);
     res.status(500).json({ error: 'Could not fetch file info.' });
-  }
-});
-
-// POST /api/download/:shareId/credit — Credit creator ₹5.00 upon verified 10s ad completion
-router.post('/:shareId/credit', (req, res) => {
-  try {
-    const file = db.prepare('SELECT id, user_id, is_monetized FROM files WHERE share_id = ?').get(req.params.shareId);
-
-    if (!file) {
-      return res.status(404).json({ error: 'File not found.' });
-    }
-
-    if (file.is_monetized === 1) {
-      // Credit ₹5.00 per valid download to creator balance
-      const rewardAmount = 5.00;
-      db.prepare('UPDATE users SET earnings = earnings + ? WHERE id = ?').run(rewardAmount, file.user_id);
-    }
-
-    res.json({ success: true, reward: 5.00 });
-  } catch (err) {
-    console.error('Credit error:', err);
-    res.status(500).json({ error: 'Credit recording failed.' });
   }
 });
 
