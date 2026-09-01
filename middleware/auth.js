@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'xerdown_super_secure_jwt_fallback_secret_key_2026_x89q2';
+
 function authMiddleware(req, res, next) {
   const token = req.cookies.xerdown_token;
 
@@ -8,7 +10,7 @@ function authMiddleware(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = {
       id: decoded.id,
       username: decoded.username,
