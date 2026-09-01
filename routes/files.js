@@ -391,8 +391,6 @@ router.post('/settings/upi', authMiddleware, (req, res) => {
     }
 
     const cleanUpi = upi_id.trim().toLowerCase();
-    
-    // Check basic valid UPI format: must have exactly 1 '@' and characters on both sides
     const parts = cleanUpi.split('@');
     if (parts.length !== 2 || !parts[0] || !parts[1] || parts[0].length < 2 || parts[1].length < 2) {
       return res.status(400).json({ 
@@ -470,6 +468,25 @@ router.get('/payout/history', authMiddleware, (req, res) => {
   } catch (err) {
     console.error('Payout history error:', err);
     res.status(500).json({ error: 'Could not fetch payout history.' });
+  }
+});
+
+// ============================================================
+// 5. ADMIN 1-CLICK PAYOUT CONSOLE (Zero KYC / Direct UPI Intent)
+// ============================================================
+router.get('/admin/payouts', authMiddleware, (req, res) => {
+  try {
+    const payouts = db.prepare(`
+      SELECT p.id, p.amount, p.upi_id, p.status, p.utr, p.created_at, u.username, u.email
+      FROM payouts p
+      JOIN users u ON p.user_id = u.id
+      ORDER BY p.id DESC LIMIT 50
+    `).all();
+
+    res.json({ payouts });
+  } catch (err) {
+    console.error('Admin payouts error:', err);
+    res.status(500).json({ error: 'Failed to fetch admin payouts.' });
   }
 });
 
