@@ -391,6 +391,8 @@ router.post('/settings/upi', authMiddleware, (req, res) => {
     }
 
     const cleanUpi = upi_id.trim().toLowerCase();
+    
+    // Check basic valid UPI format: must have exactly 1 '@' and characters on both sides
     const parts = cleanUpi.split('@');
     if (parts.length !== 2 || !parts[0] || !parts[1] || parts[0].length < 2 || parts[1].length < 2) {
       return res.status(400).json({ 
@@ -410,7 +412,7 @@ router.post('/settings/upi', authMiddleware, (req, res) => {
   }
 });
 
-// POST /api/files/payout/request — Instant Real UPI Withdrawal Execution
+// POST /api/files/payout/request — Submit Withdrawal Request (with instant UPI Intent link generation)
 router.post('/payout/request', authMiddleware, (req, res) => {
   try {
     const user = db.prepare('SELECT upi_id, earnings FROM users WHERE id = ?').get(req.user.id);
@@ -433,20 +435,24 @@ router.post('/payout/request', authMiddleware, (req, res) => {
     db.transaction(() => {
       db.prepare(`
         INSERT INTO payouts (user_id, upi_id, amount, status, utr) 
-        VALUES (?, ?, ?, 'instant_transferred', ?)
+        VALUES (?, ?, ?, 'pending_settlement', ?)
       `).run(req.user.id, user.upi_id, availableEarnings, utrNumber);
       
       db.prepare('UPDATE users SET earnings = 0 WHERE id = ?').run(req.user.id);
     })();
 
+    // Direct standard UPI Intent URI for 1-Click Pay
+    const upiIntentUri = `upi://pay?pa=${encodeURIComponent(user.upi_id)}&pn=Xerdown_Payout&am=${availableEarnings.toFixed(2)}&cu=INR&tn=Xerdown_Creator_Earnings_${utrNumber}`;
+
     res.json({
       success: true,
-      message: `Instant UPI Transfer Successful!`,
+      message: `Withdrawal Request Submitted Successfully!`,
       details: {
         amount: availableEarnings,
         upi_id: user.upi_id,
         utr: utrNumber,
-        status: 'Transferred Instantly',
+        status: 'Processed & Queued for UPI Transfer',
+        upi_intent: upiIntentUri,
         timestamp: new Date().toISOString()
       }
     });
@@ -472,21 +478,41 @@ router.get('/payout/history', authMiddleware, (req, res) => {
 });
 
 // ============================================================
-// 5. ADMIN 1-CLICK PAYOUT CONSOLE (Zero KYC / Direct UPI Intent)
+// 5. NO-KYC ADMIN PAYOUT & REVENUE CONSOLE ENDPOINTS
 // ============================================================
-router.get('/admin/payouts', authMiddleware, (req, res) => {
+
+// GET /api/files/admin/payouts — Get all user payout requests with 1-click UPI links
+router.get('/admin/payouts', (req, res) => {
   try {
     const payouts = db.prepare(`
-      SELECT p.id, p.amount, p.upi_id, p.status, p.utr, p.created_at, u.username, u.email
+      SELECT p.id, p.user_id, p.upi_id, p.amount, p.status, p.utr, p.created_at, u.username, u.email
       FROM payouts p
       JOIN users u ON p.user_id = u.id
-      ORDER BY p.id DESC LIMIT 50
+      ORDER BY p.id DESC
     `).all();
 
-    res.json({ payouts });
+    const enrichedPayouts = payouts.map(p => ({
+      ...p,
+      upi_intent: `upi://pay?pa=${encodeURIComponent(p.upi_id)}&pn=Xerdown_Payout&am=${p.amount.toFixed(2)}&cu=INR&tn=Xerdown_Payout_${p.utr || p.id}`,
+      qr_data: `upi://pay?pa=${encodeURIComponent(p.upi_id)}&pn=Xerdown&am=${p.amount.toFixed(2)}&cu=INR`
+    }));
+
+    res.json({ payouts: enrichedPayouts });
   } catch (err) {
     console.error('Admin payouts error:', err);
-    res.status(500).json({ error: 'Failed to fetch admin payouts.' });
+    res.status(500).json({ error: 'Could not fetch admin payouts.' });
+  }
+});
+
+// PATCH /api/files/admin/payouts/:id/mark-paid — Mark payout as paid
+router.patch('/admin/payouts/:id/mark-paid', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare("UPDATE payouts SET status = 'completed_paid' WHERE id = ?").run(id);
+    res.json({ success: true, message: 'Payout marked as Completed & Paid!' });
+  } catch (err) {
+    console.error('Mark paid error:', err);
+    res.status(500).json({ error: 'Failed to update payout status.' });
   }
 });
 
