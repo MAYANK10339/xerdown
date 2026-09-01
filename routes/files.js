@@ -18,9 +18,6 @@ if (!fs.existsSync(tempChunksDir)) {
   fs.mkdirSync(tempChunksDir, { recursive: true });
 }
 
-// Ensure payouts table has utr column
-try { db.exec("ALTER TABLE payouts ADD COLUMN utr TEXT;"); } catch (e) {}
-
 // Multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -385,7 +382,7 @@ router.patch('/:id/monetize', authMiddleware, (req, res) => {
   }
 });
 
-// POST /api/files/settings/upi — Save creator's UPI ID with strict verification
+// POST /api/files/settings/upi — Save creator's UPI ID
 router.post('/settings/upi', authMiddleware, (req, res) => {
   try {
     const { upi_id } = req.body;
@@ -395,23 +392,23 @@ router.post('/settings/upi', authMiddleware, (req, res) => {
 
     const cleanUpi = upi_id.trim().toLowerCase();
     
-    // Strict UPI validation regex: username@bank or number@bank
-    const upiRegex = /^[a-zA-Z0-9.\-_]{2,49}@[a-zA-Z]{2,49}$/;
-    if (!upiRegex.test(cleanUpi)) {
+    // Check basic valid UPI format: must have exactly 1 '@' and characters on both sides
+    const parts = cleanUpi.split('@');
+    if (parts.length !== 2 || !parts[0] || !parts[1] || parts[0].length < 2 || parts[1].length < 2) {
       return res.status(400).json({ 
-        error: 'Invalid UPI format. Please enter valid UPI ID (e.g. yourname@okhdfcbank, 9876543210@paytm, name@ybl).' 
+        error: 'Please enter a valid UPI ID (e.g. yourname@okhdfcbank, 9876543210@paytm, name@ybl).' 
       });
     }
 
     db.prepare('UPDATE users SET upi_id = ? WHERE id = ?').run(cleanUpi, req.user.id);
 
     res.json({
-      message: 'UPI ID verified & saved successfully.',
+      message: 'UPI ID saved & verified successfully.',
       upi_id: cleanUpi
     });
   } catch (err) {
     console.error('Save UPI error:', err);
-    res.status(500).json({ error: 'Could not save UPI ID.' });
+    res.status(500).json({ error: 'Could not save UPI ID: ' + err.message });
   }
 });
 
@@ -421,7 +418,7 @@ router.post('/payout/request', authMiddleware, (req, res) => {
     const user = db.prepare('SELECT upi_id, earnings FROM users WHERE id = ?').get(req.user.id);
 
     if (!user || !user.upi_id) {
-      return res.status(400).json({ error: 'Please save your UPI ID before requesting a withdrawal.' });
+      return res.status(400).json({ error: 'Please enter and save your UPI ID above first before withdrawing.' });
     }
 
     const availableEarnings = user.earnings || 0;
@@ -429,7 +426,7 @@ router.post('/payout/request', authMiddleware, (req, res) => {
     // Minimum ₹5.00 threshold
     if (availableEarnings < 5) {
       return res.status(400).json({ 
-        error: `Minimum withdrawal is ₹5.00. Your current earnings: ₹${availableEarnings.toFixed(2)}` 
+        error: `Minimum withdrawal is ₹5.00. Your current wallet balance is ₹${availableEarnings.toFixed(2)}. Earn ₹5.00 by having someone download your monetized file link!` 
       });
     }
 
@@ -457,7 +454,7 @@ router.post('/payout/request', authMiddleware, (req, res) => {
     });
   } catch (err) {
     console.error('Payout request error:', err);
-    res.status(500).json({ error: 'Payout processing failed.' });
+    res.status(500).json({ error: 'Payout processing error: ' + (err.message || 'Please try again.') });
   }
 });
 

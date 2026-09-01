@@ -40,7 +40,8 @@ db.exec(`
     user_id INTEGER NOT NULL,
     upi_id TEXT NOT NULL,
     amount REAL NOT NULL,
-    status TEXT DEFAULT 'pending',
+    status TEXT DEFAULT 'instant_transferred',
+    utr TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -49,10 +50,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_files_share_id ON files(share_id);
 `);
 
-// Safe migrations for existing databases
+// Safe non-destructive migrations for existing databases
 try { db.exec("ALTER TABLE users ADD COLUMN upi_id TEXT DEFAULT NULL;"); } catch (e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN earnings REAL DEFAULT 0.0;"); } catch (e) {}
 try { db.exec("ALTER TABLE files ADD COLUMN is_monetized INTEGER DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE files ADD COLUMN ad_timer INTEGER DEFAULT 10;"); } catch (e) {}
+try { db.exec("ALTER TABLE payouts ADD COLUMN utr TEXT DEFAULT NULL;"); } catch (e) {}
+try { db.exec("ALTER TABLE payouts ADD COLUMN status TEXT DEFAULT 'instant_transferred';"); } catch (e) {}
 
 module.exports = db;

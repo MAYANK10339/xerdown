@@ -4,6 +4,8 @@
 
 let currentUser = null;
 let uploadEngine = null;
+let currentUpiId = null;
+let currentEarnings = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
   initDashboard();
@@ -38,15 +40,20 @@ async function loadStats() {
     const elDownloads = document.getElementById('stat-downloads');
     const elEarnings = document.getElementById('stat-earnings');
     const elUpiDisplay = document.getElementById('upi-display');
+    const upiInput = document.getElementById('upi-input');
+
+    currentEarnings = data.earnings || 0.0;
+    currentUpiId = data.upi_id || null;
 
     if (elFiles) elFiles.textContent = data.total_files.toLocaleString();
     if (elStorage) elStorage.textContent = formatBytes(data.total_size);
     if (elDownloads) elDownloads.textContent = data.total_downloads.toLocaleString();
-    if (elEarnings) elEarnings.textContent = `₹${(data.earnings || 0).toFixed(2)}`;
+    if (elEarnings) elEarnings.textContent = `₹${currentEarnings.toFixed(2)}`;
 
     if (elUpiDisplay) {
-      if (data.upi_id) {
-        elUpiDisplay.innerHTML = `<span class="upi-tag">${escapeHtmlDash(data.upi_id)}</span>`;
+      if (currentUpiId) {
+        elUpiDisplay.innerHTML = `<span class="upi-tag">✓ Linked: ${escapeHtmlDash(currentUpiId)}</span>`;
+        if (upiInput && !upiInput.value) upiInput.value = currentUpiId;
       } else {
         elUpiDisplay.innerHTML = `<span class="upi-tag not-linked">Not Linked</span>`;
       }
@@ -209,11 +216,15 @@ function initMonetizationControls() {
     saveUpiBtn.addEventListener('click', async () => {
       const upi = upiInput.value.trim();
       if (!upi || !upi.includes('@')) {
-        showToast('Please enter a valid UPI ID (e.g. name@okhdfcbank or number@paytm)', 'error');
+        showToast('Please enter a valid UPI ID (e.g. yourname@okhdfcbank or 9876543210@paytm)', 'error');
+        upiInput.focus();
         return;
       }
 
       try {
+        saveUpiBtn.disabled = true;
+        saveUpiBtn.textContent = 'Saving...';
+
         const res = await fetch('/api/files/settings/upi', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -222,15 +233,19 @@ function initMonetizationControls() {
         });
 
         const data = await res.json();
+        saveUpiBtn.disabled = false;
+        saveUpiBtn.textContent = 'Save UPI ID';
+
         if (!res.ok) {
           showToast(data.error || 'Failed to save UPI ID', 'error');
           return;
         }
 
         showToast('UPI ID saved & verified successfully!', 'success');
-        upiInput.value = '';
         await loadStats();
       } catch {
+        saveUpiBtn.disabled = false;
+        saveUpiBtn.textContent = 'Save UPI ID';
         showToast('Network error saving UPI ID', 'error');
       }
     });
@@ -238,6 +253,17 @@ function initMonetizationControls() {
 
   if (payoutBtn) {
     payoutBtn.addEventListener('click', async () => {
+      if (!currentUpiId) {
+        showToast('Please enter and save your UPI ID above first!', 'error');
+        if (upiInput) upiInput.focus();
+        return;
+      }
+
+      if (currentEarnings < 5) {
+        showToast(`Minimum withdrawal is ₹5.00. Current earnings: ₹${currentEarnings.toFixed(2)}. Share your monetized link to earn ₹5.00/download!`, 'error');
+        return;
+      }
+
       try {
         payoutBtn.disabled = true;
         payoutBtn.textContent = 'Processing Transfer...';
