@@ -12,6 +12,18 @@ const uploadsDir = path.join(__dirname, '..', 'uploads');
 // Safe JWT Secret with built-in robust fallback
 const JWT_SECRET = process.env.JWT_SECRET || 'xerdown_super_secure_jwt_fallback_secret_key_2026_x89q2';
 
+// Helper to set cookie safely across HTTP and HTTPS
+function setAuthCookie(req, res, token) {
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.cookie('xerdown_token', token, {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+  });
+}
+
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
   try {
@@ -55,16 +67,12 @@ router.post('/signup', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    // Set httpOnly cookie
-    res.cookie('xerdown_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-    });
+    // Set cookie
+    setAuthCookie(req, res, token);
 
     res.status(201).json({
       message: 'Account created successfully.',
+      token,
       user: { id: result.lastInsertRowid, username: cleanUsername, email: cleanEmail }
     });
   } catch (err) {
@@ -103,15 +111,12 @@ router.post('/login', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.cookie('xerdown_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000
-    });
+    // Set cookie
+    setAuthCookie(req, res, token);
 
     res.json({
       message: 'Logged in successfully.',
+      token,
       user: { id: user.id, username: user.username, email: user.email }
     });
   } catch (err) {
@@ -122,13 +127,13 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('xerdown_token');
+  res.clearCookie('xerdown_token', { path: '/' });
   res.json({ message: 'Logged out successfully.' });
 });
 
 // GET /api/auth/me
 router.get('/me', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT id, username, email, storage_used, upi_id, earnings, created_at FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, username, email, storage_used, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) {
     return res.status(404).json({ error: 'User not found.' });
   }
@@ -152,12 +157,11 @@ router.delete('/delete-account', authMiddleware, (req, res) => {
     // 2. Delete database records
     db.transaction(() => {
       db.prepare('DELETE FROM files WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM payouts WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     })();
 
     // 3. Clear session cookie
-    res.clearCookie('xerdown_token');
+    res.clearCookie('xerdown_token', { path: '/' });
 
     res.json({ message: 'Your account and all associated files have been permanently deleted.' });
   } catch (err) {

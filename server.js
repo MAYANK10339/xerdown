@@ -12,6 +12,9 @@ require('./config/db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Render/Cloudflare HTTPS headers
+app.set('trust proxy', 1);
+
 // --- Middleware ---
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));

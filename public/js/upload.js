@@ -1,7 +1,7 @@
 /* ==========================================================
    XERDOWN — Ultra-Concurrency Parallel Streaming Engine
    Supports: 100MB - 100GB+ Files with 16 Parallel Streams,
-   Instant Deduplication (0.01s), and Custom Download Timer.
+   Instant Deduplication (0.01s), Custom Download Timer & Dual Auth.
    ========================================================== */
 
 class UploadEngine {
@@ -76,10 +76,9 @@ class UploadEngine {
 
     // 1. Instant Deduplication Fast-Track Check (< 0.02s)
     try {
-      const instantCheckRes = await fetch('/api/files/check-instant', {
+      const instantCheckRes = await authFetch('/api/files/check-instant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           originalName: file.name,
           size: file.size,
@@ -138,6 +137,11 @@ class UploadEngine {
 
     xhr.open('POST', '/api/files/upload');
     xhr.withCredentials = true;
+
+    const token = localStorage.getItem('xerdown_token');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
 
     xhr.upload.addEventListener('progress', (e) => {
       if (!e.lengthComputable) return;
@@ -230,10 +234,9 @@ class UploadEngine {
     this.runningFiles++;
 
     try {
-      const initRes = await fetch('/api/files/chunk-init', {
+      const initRes = await authFetch('/api/files/chunk-init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         signal: abortController.signal,
         body: JSON.stringify({
           originalName: file.name,
@@ -257,6 +260,8 @@ class UploadEngine {
       let lastTotalLoaded = 0;
       const speedSamples = [];
 
+      const token = localStorage.getItem('xerdown_token');
+
       const uploadSingleChunk = (chunkIndex) => {
         return new Promise((resolve, reject) => {
           if (abortController.signal.aborted) return reject(new Error('Upload aborted'));
@@ -275,6 +280,10 @@ class UploadEngine {
 
           xhr.open('POST', '/api/files/chunk-upload');
           xhr.withCredentials = true;
+
+          if (token) {
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+          }
 
           xhr.upload.addEventListener('progress', (e) => {
             if (e.lengthComputable) {
@@ -359,10 +368,9 @@ class UploadEngine {
         file
       });
 
-      const completeRes = await fetch('/api/files/chunk-complete', {
+      const completeRes = await authFetch('/api/files/chunk-complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ uploadId })
       });
 

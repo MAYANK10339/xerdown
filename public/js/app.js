@@ -1,5 +1,5 @@
 /* ============================================
-   XERDOWN — Shared Utilities
+   XERDOWN — Shared Utilities & Dual-Layer Auth
    Theme toggle, auth helpers, formatters, toasts
    ============================================ */
 
@@ -25,11 +25,32 @@ function updateThemeIcon(theme) {
   }
 }
 
-// --- Auth Helpers ---
+// --- Dual-Layer Auth Helpers ---
+function getAuthHeaders(customHeaders = {}) {
+  const headers = { ...customHeaders };
+  const token = localStorage.getItem('xerdown_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+async function authFetch(url, options = {}) {
+  const opts = {
+    ...options,
+    credentials: 'include',
+    headers: getAuthHeaders(options.headers || {})
+  };
+  return fetch(url, opts);
+}
+
 async function checkAuth() {
   try {
-    const res = await fetch('/api/auth/me', { credentials: 'include' });
-    if (!res.ok) return null;
+    const res = await authFetch('/api/auth/me');
+    if (!res.ok) {
+      localStorage.removeItem('xerdown_token');
+      return null;
+    }
     const data = await res.json();
     return data.user;
   } catch {
@@ -39,10 +60,11 @@ async function checkAuth() {
 
 async function logout() {
   try {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    await authFetch('/api/auth/logout', { method: 'POST' });
   } catch {
     // ignore
   }
+  localStorage.removeItem('xerdown_token');
   window.location.href = '/login.html';
 }
 
@@ -66,37 +88,35 @@ async function requireAuth() {
 
 // --- Formatters ---
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
+  if (!bytes || bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 2 : 0) + ' ' + units[i];
 }
 
 function formatSpeed(bytesPerSec) {
-  if (bytesPerSec === 0) return '0 B/s';
+  if (!bytesPerSec || bytesPerSec === 0) return '0 B/s';
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
   const i = Math.floor(Math.log(bytesPerSec) / Math.log(1024));
   return (bytesPerSec / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
 }
 
 function formatDate(dateStr) {
+  if (!dateStr) return '—';
   const d = new Date(dateStr);
   const now = new Date();
   const diff = now - d;
 
-  // Less than 1 minute
   if (diff < 60000) return 'Just now';
-  // Less than 1 hour
   if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-  // Less than 24 hours
   if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-  // Less than 7 days
   if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
 
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function truncateFilename(name, maxLen) {
+  if (!name) return '';
   if (name.length <= maxLen) return name;
   const ext = name.lastIndexOf('.');
   if (ext === -1) return name.slice(0, maxLen - 3) + '...';
@@ -135,7 +155,6 @@ async function copyToClipboard(text) {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // Fallback
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -157,13 +176,11 @@ function getDownloadUrl(shareId) {
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
 
-  // Bind theme toggle
   const themeBtn = document.getElementById('theme-toggle');
   if (themeBtn) {
     themeBtn.addEventListener('click', toggleTheme);
   }
 
-  // Bind logout buttons
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', (e) => {

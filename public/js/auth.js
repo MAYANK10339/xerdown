@@ -1,6 +1,6 @@
 /* ============================================
    XERDOWN — Auth Form Handlers
-   Login & Signup page logic
+   Login & Signup page logic with Dual-Layer Auth
    ============================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -56,10 +56,15 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
+        // Store dual-layer token
+        if (data.token) {
+          localStorage.setItem('xerdown_token', data.token);
+        }
+
         showAlert(alert, 'Account created! Redirecting...', 'success');
         setTimeout(() => {
           window.location.href = '/dashboard.html';
-        }, 800);
+        }, 400);
       } catch (err) {
         showAlert(alert, 'Connection error. Please try again.', 'error');
         btn.disabled = false;
@@ -105,10 +110,15 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
+        // Store dual-layer token
+        if (data.token) {
+          localStorage.setItem('xerdown_token', data.token);
+        }
+
         showAlert(alert, 'Logged in! Redirecting...', 'success');
         setTimeout(() => {
           window.location.href = '/dashboard.html';
-        }, 800);
+        }, 400);
       } catch (err) {
         showAlert(alert, 'Connection error. Please try again.', 'error');
         btn.disabled = false;

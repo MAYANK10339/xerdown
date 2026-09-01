@@ -28,7 +28,7 @@ async function initDashboard() {
    ------------------------------------------ */
 async function loadStats() {
   try {
-    const res = await fetch('/api/files/stats', { credentials: 'include' });
+    const res = await authFetch('/api/files/stats');
     if (!res.ok) return;
     const data = await res.json();
 
@@ -99,7 +99,7 @@ function initUpload() {
    ------------------------------------------ */
 async function loadFiles() {
   try {
-    const res = await fetch('/api/files', { credentials: 'include' });
+    const res = await authFetch('/api/files');
     if (!res.ok) return;
     const data = await res.json();
 
@@ -181,10 +181,9 @@ async function changeFileTimer(fileId, currentSeconds) {
   const seconds = Math.max(0, parseInt(input, 10) || 0);
 
   try {
-    const res = await fetch(`/api/files/${fileId}/timer`, {
+    const res = await authFetch(`/api/files/${fileId}/timer`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ seconds })
     });
 
@@ -219,9 +218,8 @@ function initDangerZone() {
       deleteBtn.disabled = true;
       deleteBtn.textContent = 'Deleting Account...';
 
-      const res = await fetch('/api/auth/delete-account', {
-        method: 'DELETE',
-        credentials: 'include'
+      const res = await authFetch('/api/auth/delete-account', {
+        method: 'DELETE'
       });
 
       const data = await res.json();
@@ -232,6 +230,7 @@ function initDangerZone() {
         return;
       }
 
+      localStorage.removeItem('xerdown_token');
       alert('Your account and files have been permanently deleted.');
       window.location.href = '/signup.html';
     } catch {
@@ -267,9 +266,8 @@ async function deleteFile(fileId, fileName) {
   if (!confirm(`Delete "${fileName}"? This cannot be undone.`)) return;
 
   try {
-    const res = await fetch(`/api/files/${fileId}`, {
-      method: 'DELETE',
-      credentials: 'include'
+    const res = await authFetch(`/api/files/${fileId}`, {
+      method: 'DELETE'
     });
 
     const data = await res.json();
