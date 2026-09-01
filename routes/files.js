@@ -8,7 +8,6 @@ const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Ensure upload & temporary chunks directories exist
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 const tempChunksDir = path.join(uploadsDir, 'temp_chunks');
 
@@ -19,11 +18,9 @@ if (!fs.existsSync(tempChunksDir)) {
   fs.mkdirSync(tempChunksDir, { recursive: true });
 }
 
-// Multer disk storage config for standard uploads
+// Multer storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
     const uniqueName = `${Date.now()}-${nanoid(12)}${path.extname(file.originalname)}`;
     cb(null, uniqueName);
@@ -35,7 +32,6 @@ const upload = multer({
   limits: { fileSize: Infinity }
 });
 
-// Multer for chunk uploads (memory buffer for immediate fast stream write)
 const chunkStorage = multer.memoryStorage();
 const uploadChunkMulter = multer({
   storage: chunkStorage,
@@ -43,18 +39,18 @@ const uploadChunkMulter = multer({
 });
 
 // ==========================================
-// 1. INSTANT UPLOAD (Fast-Track Deduplication)
+// 1. INSTANT DEDUPLICATION FAST-TRACK
 // ==========================================
 router.post('/check-instant', authMiddleware, async (req, res) => {
   try {
-    const { originalName, size, mimeType } = req.body;
+    const { originalName, size, mimeType, isMonetized } = req.body;
     const fileSize = parseInt(size, 10);
+    const monetizedFlag = isMonetized ? 1 : 0;
 
     if (!originalName || !fileSize) {
       return res.json({ instant: false });
     }
 
-    // Check if an identical file already exists on server disk
     const existing = db.prepare(`
       SELECT stored_name, mime_type FROM files 
       WHERE size = ? AND original_name = ?
@@ -64,22 +60,19 @@ router.post('/check-instant', authMiddleware, async (req, res) => {
     if (existing) {
       const diskPath = path.join(uploadsDir, existing.stored_name);
       if (fs.existsSync(diskPath)) {
-        // Fast-track duplicate record creation with zero network transfer
         const shareId = nanoid(10);
         const newStoredName = `${Date.now()}-${nanoid(12)}${path.extname(originalName)}`;
         const newDiskPath = path.join(uploadsDir, newStoredName);
 
-        // Instant hard link / fast copy on disk
         try {
           await fs.promises.copyFile(diskPath, newDiskPath);
         } catch {
-          // fallback if copy fails
           return res.json({ instant: false });
         }
 
         const insertStmt = db.prepare(`
-          INSERT INTO files (user_id, original_name, stored_name, mime_type, size, share_id)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO files (user_id, original_name, stored_name, mime_type, size, share_id, is_monetized)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
         const updateStorage = db.prepare('UPDATE users SET storage_used = storage_used + ? WHERE id = ?');
 
@@ -90,7 +83,8 @@ router.post('/check-instant', authMiddleware, async (req, res) => {
             newStoredName,
             mimeType || existing.mime_type || 'application/octet-stream',
             fileSize,
-            shareId
+            shareId,
+            monetizedFlag
           );
           updateStorage.run(fileSize, req.user.id);
         })();
@@ -102,7 +96,8 @@ router.post('/check-instant', authMiddleware, async (req, res) => {
             original_name: originalName,
             size: fileSize,
             mime_type: mimeType || existing.mime_type,
-            share_id: shareId
+            share_id: shareId,
+            is_monetized: monetizedFlag
           }
         });
       }
@@ -124,11 +119,12 @@ router.post('/upload', authMiddleware, upload.array('files'), (req, res) => {
       return res.status(400).json({ error: 'No files provided.' });
     }
 
-    const insertStmt = db.prepare(`
-      INSERT INTO files (user_id, original_name, stored_name, mime_type, size, share_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const isMonetized = req.body.isMonetized === 'true' || req.body.isMonetized === '1' ? 1 : 0;
 
+    const insertStmt = db.prepare(`
+      INSERT INTO files (user_id, original_name, stored_name, mime_type, size, share_id, is_monetized)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
     const updateStorage = db.prepare('UPDATE users SET storage_used = storage_used + ? WHERE id = ?');
     const uploadedFiles = [];
 
@@ -141,7 +137,8 @@ router.post('/upload', authMiddleware, upload.array('files'), (req, res) => {
           file.filename,
           file.mimetype || 'application/octet-stream',
           file.size,
-          shareId
+          shareId,
+          isMonetized
         );
         updateStorage.run(file.size, req.user.id);
 
@@ -149,7 +146,8 @@ router.post('/upload', authMiddleware, upload.array('files'), (req, res) => {
           original_name: file.originalname,
           size: file.size,
           mime_type: file.mimetype,
-          share_id: shareId
+          share_id: shareId,
+          is_monetized: isMonetized
         });
       }
     });
@@ -167,13 +165,13 @@ router.post('/upload', authMiddleware, upload.array('files'), (req, res) => {
 });
 
 // ============================================================
-// 3. PARALLEL CHUNKED UPLOAD (For 800MB - 12GB+ files)
+// 3. ADAPTIVE PARALLEL CHUNKED UPLOAD (Up to 100GB+)
 // ============================================================
 const activeSessions = new Map();
 
 router.post('/chunk-init', authMiddleware, (req, res) => {
   try {
-    const { originalName, mimeType, totalSize, totalChunks } = req.body;
+    const { originalName, mimeType, totalSize, totalChunks, isMonetized } = req.body;
 
     if (!originalName || !totalSize || !totalChunks) {
       return res.status(400).json({ error: 'Missing chunk session parameters.' });
@@ -189,6 +187,7 @@ router.post('/chunk-init', authMiddleware, (req, res) => {
       mimeType: mimeType || 'application/octet-stream',
       totalSize: parseInt(totalSize, 10),
       totalChunks: parseInt(totalChunks, 10),
+      isMonetized: isMonetized ? 1 : 0,
       receivedChunks: new Set(),
       sessionDir,
       createdAt: Date.now()
@@ -252,12 +251,12 @@ router.post('/chunk-complete', authMiddleware, async (req, res) => {
 
     const storedName = `${Date.now()}-${nanoid(12)}${path.extname(session.originalName)}`;
     const finalFilePath = path.join(uploadsDir, storedName);
-    const finalWriteStream = fs.createWriteStream(finalFilePath, { highWaterMark: 16 * 1024 * 1024 });
+    const finalWriteStream = fs.createWriteStream(finalFilePath, { highWaterMark: 32 * 1024 * 1024 });
 
     for (let i = 0; i < session.totalChunks; i++) {
       const chunkPath = path.join(session.sessionDir, `part_${i.toString().padStart(6, '0')}`);
       await new Promise((resolve, reject) => {
-        const readStream = fs.createReadStream(chunkPath, { highWaterMark: 16 * 1024 * 1024 });
+        const readStream = fs.createReadStream(chunkPath, { highWaterMark: 32 * 1024 * 1024 });
         readStream.on('error', reject);
         readStream.on('end', resolve);
         readStream.pipe(finalWriteStream, { end: false });
@@ -278,8 +277,8 @@ router.post('/chunk-complete', authMiddleware, async (req, res) => {
     const actualSize = stat.size;
 
     const insertStmt = db.prepare(`
-      INSERT INTO files (user_id, original_name, stored_name, mime_type, size, share_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO files (user_id, original_name, stored_name, mime_type, size, share_id, is_monetized)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const updateStorage = db.prepare('UPDATE users SET storage_used = storage_used + ? WHERE id = ?');
 
@@ -290,7 +289,8 @@ router.post('/chunk-complete', authMiddleware, async (req, res) => {
         storedName,
         session.mimeType,
         actualSize,
-        shareId
+        shareId,
+        session.isMonetized || 0
       );
       updateStorage.run(actualSize, req.user.id);
     })();
@@ -301,7 +301,8 @@ router.post('/chunk-complete', authMiddleware, async (req, res) => {
         original_name: session.originalName,
         size: actualSize,
         mime_type: session.mimeType,
-        share_id: shareId
+        share_id: shareId,
+        is_monetized: session.isMonetized || 0
       }
     });
   } catch (err) {
@@ -311,12 +312,14 @@ router.post('/chunk-complete', authMiddleware, async (req, res) => {
 });
 
 // ==========================================
-// 4. FILE LISTING, STATS & DELETION
+// 4. FILE LISTING, STATS, MONETIZATION & UPI
 // ==========================================
+
+// GET /api/files — List all files for authenticated user
 router.get('/', authMiddleware, (req, res) => {
   try {
     const files = db.prepare(`
-      SELECT id, original_name, mime_type, size, share_id, download_count, created_at
+      SELECT id, original_name, mime_type, size, share_id, download_count, is_monetized, created_at
       FROM files WHERE user_id = ? ORDER BY created_at DESC
     `).all(req.user.id);
 
@@ -327,6 +330,7 @@ router.get('/', authMiddleware, (req, res) => {
   }
 });
 
+// GET /api/files/stats — Storage stats + UPI & Earnings
 router.get('/stats', authMiddleware, (req, res) => {
   try {
     const stats = db.prepare(`
@@ -337,13 +341,18 @@ router.get('/stats', authMiddleware, (req, res) => {
       FROM files WHERE user_id = ?
     `).get(req.user.id);
 
-    const user = db.prepare('SELECT storage_used FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT storage_used, upi_id, earnings FROM users WHERE id = ?').get(req.user.id);
+
+    const monetizedFilesCount = db.prepare('SELECT COUNT(*) as count FROM files WHERE user_id = ? AND is_monetized = 1').get(req.user.id);
 
     res.json({
       total_files: stats.total_files,
       total_size: stats.total_size,
       total_downloads: stats.total_downloads,
-      storage_used: user.storage_used
+      storage_used: user.storage_used || 0,
+      upi_id: user.upi_id || null,
+      earnings: user.earnings || 0.0,
+      monetized_count: monetizedFilesCount.count || 0
     });
   } catch (err) {
     console.error('Stats error:', err);
@@ -351,6 +360,79 @@ router.get('/stats', authMiddleware, (req, res) => {
   }
 });
 
+// PATCH /api/files/:id/monetize — Toggle file monetization ON/OFF
+router.patch('/:id/monetize', authMiddleware, (req, res) => {
+  try {
+    const file = db.prepare('SELECT id, is_monetized FROM files WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found.' });
+    }
+
+    const newStatus = file.is_monetized === 1 ? 0 : 1;
+    db.prepare('UPDATE files SET is_monetized = ? WHERE id = ?').run(newStatus, file.id);
+
+    res.json({
+      message: `Monetization ${newStatus === 1 ? 'enabled' : 'disabled'}.`,
+      is_monetized: newStatus
+    });
+  } catch (err) {
+    console.error('Toggle monetization error:', err);
+    res.status(500).json({ error: 'Could not update monetization status.' });
+  }
+});
+
+// POST /api/files/settings/upi — Save creator's UPI ID
+router.post('/settings/upi', authMiddleware, (req, res) => {
+  try {
+    const { upi_id } = req.body;
+    if (!upi_id || !upi_id.trim() || !upi_id.includes('@')) {
+      return res.status(400).json({ error: 'Please enter a valid UPI ID (e.g. yourname@upi).' });
+    }
+
+    const cleanUpi = upi_id.trim();
+    db.prepare('UPDATE users SET upi_id = ? WHERE id = ?').run(cleanUpi, req.user.id);
+
+    res.json({
+      message: 'UPI ID saved successfully.',
+      upi_id: cleanUpi
+    });
+  } catch (err) {
+    console.error('Save UPI error:', err);
+    res.status(500).json({ error: 'Could not save UPI ID.' });
+  }
+});
+
+// POST /api/files/payout/request — Request UPI withdrawal
+router.post('/payout/request', authMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT upi_id, earnings FROM users WHERE id = ?').get(req.user.id);
+
+    if (!user.upi_id) {
+      return res.status(400).json({ error: 'Please link your UPI ID before requesting a payout.' });
+    }
+
+    const availableEarnings = user.earnings || 0;
+    if (availableEarnings < 10) {
+      return res.status(400).json({ error: 'Minimum payout balance is ₹10. Current balance: ₹' + availableEarnings.toFixed(2) });
+    }
+
+    db.transaction(() => {
+      db.prepare('INSERT INTO payouts (user_id, upi_id, amount, status) VALUES (?, ?, ?, ?)').run(req.user.id, user.upi_id, availableEarnings, 'processing');
+      db.prepare('UPDATE users SET earnings = 0 WHERE id = ?').run(req.user.id);
+    })();
+
+    res.json({
+      message: `Payout request of ₹${availableEarnings.toFixed(2)} submitted to ${user.upi_id}! Instant processing.`,
+      amount: availableEarnings
+    });
+  } catch (err) {
+    console.error('Payout request error:', err);
+    res.status(500).json({ error: 'Payout request failed.' });
+  }
+});
+
+// DELETE /api/files/:id — Delete file
 router.delete('/:id', authMiddleware, (req, res) => {
   try {
     const file = db.prepare('SELECT * FROM files WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);

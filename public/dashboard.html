@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — Xerdown</title>
-  <meta name="description" content="Manage your hosted files, monitor storage metrics, and generate secure distribution links with no file size limits.">
+  <meta name="description" content="Manage your hosted files, monitor storage metrics, earnings, and generate distribution links with no file size limits.">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -39,10 +39,10 @@
       <!-- Header -->
       <div class="dashboard-header animate-fade-in">
         <h1>Storage & Transfer Console</h1>
-        <p>Monitor storage usage, manage distribution links, and upload files with no size limits</p>
+        <p>Ultra-speed file ingestion up to 100GB+, UPI creator monetization, and unlimited distribution</p>
       </div>
 
-      <!-- Stats -->
+      <!-- Stats & Creator Wallet Grid -->
       <div class="stats-grid animate-fade-in-up">
         <div class="stat-card">
           <div class="stat-icon" id="stat-files-icon"></div>
@@ -65,13 +65,55 @@
             <p>Total Downloads</p>
           </div>
         </div>
+        <div class="stat-card earnings-card">
+          <div class="stat-icon" id="stat-earnings-icon"></div>
+          <div class="stat-info">
+            <h3 id="stat-earnings" class="gradient-text">₹0.00</h3>
+            <p>Creator Earnings (UPI)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Creator UPI & Payout Section -->
+      <div class="creator-payout-box glass-card animate-fade-in-up">
+        <div class="creator-payout-header">
+          <div>
+            <h3><span id="upi-box-icon"></span> Creator Monetization & UPI Payouts</h3>
+            <p>Earn ₹0.50 per download with 10s Sponsor Gateway. Payouts sent directly to your UPI ID.</p>
+          </div>
+          <div class="creator-payout-actions">
+            <div id="upi-display" class="upi-status-pill">
+              <span class="upi-tag not-linked">Checking UPI...</span>
+            </div>
+            <button class="btn btn-primary btn-sm" id="request-payout-btn">
+              Withdraw to UPI
+            </button>
+          </div>
+        </div>
+
+        <div class="upi-input-group">
+          <input type="text" id="upi-input" class="form-input" placeholder="Enter UPI ID (e.g. yourname@okhdfcbank or number@paytm)">
+          <button class="btn btn-secondary btn-sm" id="save-upi-btn">Save UPI ID</button>
+        </div>
       </div>
 
       <!-- Upload Section -->
       <div class="upload-section animate-fade-in-up">
         <div class="upload-section-header">
-          <h2><span id="upload-header-icon"></span> File Ingestion Engine</h2>
-          <span class="hyperspeed-badge">Adaptive Parallel Streams · 100MB/s Turbo</span>
+          <h2><span id="upload-header-icon"></span> Ultra-Throughput File Ingestion</h2>
+          <span class="hyperspeed-badge">16x Parallel Streams · Up to 100GB+</span>
+        </div>
+
+        <!-- Monetization Checkbox for Upload -->
+        <div class="monetize-upload-bar glass-card">
+          <label class="custom-checkbox-label" for="monetize-upload-checkbox">
+            <input type="checkbox" id="monetize-upload-checkbox" checked>
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">
+              <strong>Enable 10s Sponsor Gateway (Monetize Upload)</strong>
+              <small>Show 10s countdown to earn money on every download. Uncheck for instant direct download.</small>
+            </span>
+          </label>
         </div>
 
         <div class="upload-zone" id="upload-zone">
@@ -79,7 +121,7 @@
           <div class="upload-zone-content">
             <div class="upload-icon" id="upload-zone-icon"></div>
             <h3>Drag & drop files here or <span class="browse-text">browse local files</span></h3>
-            <p>No size limit · Upload any file size with adaptive parallel streaming and instant deduplication</p>
+            <p>No size limits · 100MB, 1GB, 10GB, 100GB+ files upload with 16 parallel streams and instant deduplication</p>
           </div>
         </div>
 
@@ -100,6 +142,7 @@
                 <th>File Name</th>
                 <th>Size</th>
                 <th>Downloads</th>
+                <th>Monetization</th>
                 <th>Timestamp</th>
                 <th>Actions</th>
               </tr>
@@ -112,7 +155,7 @@
         <div class="empty-state" id="files-empty">
           <div class="empty-state-icon" id="empty-state-icon"></div>
           <h3>No files currently hosted</h3>
-          <p>Drop a file above to begin high-speed distribution</p>
+          <p>Drop a file above to begin high-speed distribution & monetization</p>
         </div>
       </div>
 
@@ -137,6 +180,8 @@
     document.getElementById('stat-files-icon').innerHTML = icon('folder');
     document.getElementById('stat-storage-icon').innerHTML = icon('storage');
     document.getElementById('stat-downloads-icon').innerHTML = icon('download');
+    document.getElementById('stat-earnings-icon').innerHTML = icon('sparkles');
+    document.getElementById('upi-box-icon').innerHTML = icon('bolt');
     document.getElementById('upload-header-icon').innerHTML = icon('cloudUpload');
     document.getElementById('upload-zone-icon').innerHTML = icon('cloudUpload');
     document.getElementById('files-header-icon').innerHTML = icon('layers');

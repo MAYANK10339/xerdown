@@ -1,7 +1,6 @@
-/* ============================================
-   XERDOWN — Dashboard Logic
-   Stats, file list, upload zone orchestration
-   ============================================ */
+/* ==========================================================
+   XERDOWN — Dashboard Logic with Creator Monetization & UPI
+   ========================================================== */
 
 let currentUser = null;
 let uploadEngine = null;
@@ -11,25 +10,21 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initDashboard() {
-  // Auth check
   currentUser = await requireAuth();
   if (!currentUser) return;
 
-  // Display username
   const userDisplay = document.getElementById('navbar-username');
   if (userDisplay) {
     userDisplay.textContent = currentUser.username;
   }
 
-  // Load data
   await Promise.all([loadStats(), loadFiles()]);
-
-  // Init upload
   initUpload();
+  initMonetizationControls();
 }
 
 /* ------------------------------------------
-   Stats
+   Stats & Creator Wallet
    ------------------------------------------ */
 async function loadStats() {
   try {
@@ -40,17 +35,28 @@ async function loadStats() {
     const elFiles = document.getElementById('stat-files');
     const elStorage = document.getElementById('stat-storage');
     const elDownloads = document.getElementById('stat-downloads');
+    const elEarnings = document.getElementById('stat-earnings');
+    const elUpiDisplay = document.getElementById('upi-display');
 
     if (elFiles) elFiles.textContent = data.total_files.toLocaleString();
     if (elStorage) elStorage.textContent = formatBytes(data.total_size);
     if (elDownloads) elDownloads.textContent = data.total_downloads.toLocaleString();
+    if (elEarnings) elEarnings.textContent = `₹${(data.earnings || 0).toFixed(2)}`;
+
+    if (elUpiDisplay) {
+      if (data.upi_id) {
+        elUpiDisplay.innerHTML = `<span class="upi-tag">${escapeHtmlDash(data.upi_id)}</span>`;
+      } else {
+        elUpiDisplay.innerHTML = `<span class="upi-tag not-linked">Not Linked</span>`;
+      }
+    }
   } catch (err) {
     console.error('Stats load error:', err);
   }
 }
 
 /* ------------------------------------------
-   Upload Zone
+   Upload Zone with Monetization Toggle
    ------------------------------------------ */
 function initUpload() {
   const zone = document.getElementById('upload-zone');
@@ -58,8 +64,8 @@ function initUpload() {
   const progressList = document.getElementById('upload-progress-list');
 
   uploadEngine = new UploadEngine({
-    onFileStart(id, file) {
-      const item = createProgressItem(id, file);
+    onFileStart(id, file, isMonetized) {
+      const item = createProgressItem(id, file, isMonetized);
       progressList.prepend(item);
     },
 
@@ -79,11 +85,9 @@ function initUpload() {
 
     async onComplete(completed, total) {
       if (completed > 0) {
-        // Refresh data
         await Promise.all([loadStats(), loadFiles()]);
       }
 
-      // Clear completed progress items after a delay
       setTimeout(() => {
         const items = progressList.querySelectorAll('.upload-complete');
         items.forEach(item => {
@@ -96,14 +100,13 @@ function initUpload() {
     }
   });
 
-  // Init drag & drop zone
-  initUploadZone(zone, input, (files) => {
-    uploadEngine.uploadFiles(files);
+  initUploadZone(zone, input, (files, isMonetized) => {
+    uploadEngine.uploadFiles(files, isMonetized);
   });
 }
 
 /* ------------------------------------------
-   Files List
+   Files List & Monetization Toggle
    ------------------------------------------ */
 async function loadFiles() {
   try {
@@ -148,6 +151,13 @@ function renderFiles(files) {
       </td>
       <td>${formatBytes(file.size)}</td>
       <td>${file.download_count.toLocaleString()}</td>
+      <td>
+        <button class="monetize-badge-btn ${file.is_monetized ? 'active' : ''}" 
+                title="Click to toggle 10s Sponsor Gateway monetization" 
+                onclick="toggleFileMonetization(${file.id})">
+          ${file.is_monetized ? '₹ 10s Sponsor' : 'Free Direct'}
+        </button>
+      </td>
       <td>${formatDate(file.created_at)}</td>
       <td>
         <div class="file-actions">
@@ -167,6 +177,88 @@ function renderFiles(files) {
 }
 
 /* ------------------------------------------
+   Monetization & UPI Handlers
+   ------------------------------------------ */
+async function toggleFileMonetization(fileId) {
+  try {
+    const res = await fetch(`/api/files/${fileId}/monetize`, {
+      method: 'PATCH',
+      credentials: 'include'
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update monetization.', 'error');
+      return;
+    }
+
+    showToast(data.message, 'success');
+    await loadFiles();
+  } catch (err) {
+    showToast('Network error updating monetization.', 'error');
+  }
+}
+
+function initMonetizationControls() {
+  const saveUpiBtn = document.getElementById('save-upi-btn');
+  const upiInput = document.getElementById('upi-input');
+  const payoutBtn = document.getElementById('request-payout-btn');
+
+  if (saveUpiBtn && upiInput) {
+    saveUpiBtn.addEventListener('click', async () => {
+      const upi = upiInput.value.trim();
+      if (!upi || !upi.includes('@')) {
+        showToast('Please enter a valid UPI ID (e.g. name@upi)', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/files/settings/upi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ upi_id: upi })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || 'Failed to save UPI ID', 'error');
+          return;
+        }
+
+        showToast('UPI ID saved successfully!', 'success');
+        upiInput.value = '';
+        await loadStats();
+      } catch {
+        showToast('Network error saving UPI ID', 'error');
+      }
+    });
+  }
+
+  if (payoutBtn) {
+    payoutBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/files/payout/request', {
+          method: 'POST',
+          credentials: 'include'
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || 'Payout request failed', 'error');
+          return;
+        }
+
+        showToast(data.message, 'success');
+        await loadStats();
+      } catch {
+        showToast('Network error requesting payout', 'error');
+      }
+    });
+  }
+}
+
+/* ------------------------------------------
    File Actions
    ------------------------------------------ */
 async function copyShareLink(shareId, btnEl) {
@@ -176,7 +268,6 @@ async function copyShareLink(shareId, btnEl) {
   if (success) {
     showToast('Share link copied!', 'success');
 
-    // Visual feedback on button
     if (btnEl) {
       btnEl.classList.add('copied');
       btnEl.innerHTML = icon('check');
@@ -206,7 +297,6 @@ async function deleteFile(fileId, fileName) {
 
     showToast('File deleted.', 'success');
 
-    // Animate row removal
     const row = document.querySelector(`tr[data-file-id="${fileId}"]`);
     if (row) {
       row.style.opacity = '0';
@@ -215,7 +305,6 @@ async function deleteFile(fileId, fileName) {
       setTimeout(() => row.remove(), 300);
     }
 
-    // Refresh stats & check empty state
     await loadStats();
     setTimeout(loadFiles, 400);
   } catch (err) {
@@ -228,12 +317,12 @@ async function deleteFile(fileId, fileName) {
    ------------------------------------------ */
 function escapeHtmlDash(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = str || '';
   return div.innerHTML;
 }
 
 function escapeAttr(str) {
-  return str
+  return (str || '')
     .replace(/&/g, '&amp;')
     .replace(/'/g, '&#39;')
     .replace(/"/g, '&quot;')

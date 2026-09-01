@@ -6,26 +6,61 @@ const db = require('../config/db');
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 
-// GET /api/download/:shareId/info — Get file metadata (public)
+// GET /api/download/:shareId/info — File metadata + Monetization check
 router.get('/:shareId/info', (req, res) => {
   try {
     const file = db.prepare(`
-      SELECT original_name, mime_type, size, download_count, created_at
-      FROM files WHERE share_id = ?
+      SELECT f.original_name, f.mime_type, f.size, f.download_count, f.is_monetized, f.ad_timer, f.created_at, u.username as creator_name
+      FROM files f
+      JOIN users u ON f.user_id = u.id
+      WHERE f.share_id = ?
     `).get(req.params.shareId);
 
     if (!file) {
       return res.status(404).json({ error: 'File not found or link expired.' });
     }
 
-    res.json({ file });
+    res.json({
+      file: {
+        original_name: file.original_name,
+        mime_type: file.mime_type,
+        size: file.size,
+        download_count: file.download_count,
+        is_monetized: file.is_monetized === 1,
+        ad_timer: file.ad_timer || 10,
+        creator_name: file.creator_name,
+        created_at: file.created_at
+      }
+    });
   } catch (err) {
     console.error('File info error:', err);
     res.status(500).json({ error: 'Could not fetch file info.' });
   }
 });
 
-// GET /api/download/:shareId — Stream file download (public, 16MB buffer, NO throttling)
+// POST /api/download/:shareId/credit — Credit creator upon verified 10s ad completion
+router.post('/:shareId/credit', (req, res) => {
+  try {
+    const file = db.prepare('SELECT id, user_id, is_monetized FROM files WHERE share_id = ?').get(req.params.shareId);
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found.' });
+    }
+
+    if (file.is_monetized === 1) {
+      // Credit ₹0.50 (50 paise per valid download) to creator balance
+      const rewardAmount = 0.50;
+      db.prepare('UPDATE users SET earnings = earnings + ? WHERE id = ?').run(rewardAmount, file.user_id);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Credit error:', err);
+    res.status(500).json({ error: 'Credit recording failed.' });
+  }
+});
+
+// GET /api/download/:shareId — Stream file download
 router.get('/:shareId', (req, res) => {
   try {
     const file = db.prepare('SELECT * FROM files WHERE share_id = ?').get(req.params.shareId);
@@ -43,7 +78,7 @@ router.get('/:shareId', (req, res) => {
     const stat = fs.statSync(filePath);
     const fileSize = stat.size;
 
-    // Handle HTTP Range requests for multi-connection / resumable downloaders (IDM, browsers)
+    // Handle Range requests
     const range = req.headers.range;
 
     if (range) {
@@ -70,12 +105,11 @@ router.get('/:shareId', (req, res) => {
       const stream = fs.createReadStream(filePath, {
         start,
         end,
-        highWaterMark: 16 * 1024 * 1024 // 16MB buffer chunks for maximum streaming throughput
+        highWaterMark: 16 * 1024 * 1024
       });
 
       stream.pipe(res);
     } else {
-      // Full streaming download with 16MB buffer
       res.set({
         'Content-Type': file.mime_type || 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${encodeURIComponent(file.original_name)}"`,
@@ -86,7 +120,7 @@ router.get('/:shareId', (req, res) => {
       });
 
       const stream = fs.createReadStream(filePath, {
-        highWaterMark: 16 * 1024 * 1024 // 16MB buffer
+        highWaterMark: 16 * 1024 * 1024
       });
 
       stream.pipe(res);

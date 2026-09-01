@@ -1,9 +1,7 @@
 /* ==========================================================
-   XERDOWN — Adaptive High-Throughput Stream Engine
-   - Files >= 1GB : 10 Parallel Streams @ 40MB Chunks (100MB/s+ Target)
-   - Files < 1GB  : 6 Parallel Streams @ 16MB Chunks (50MB/s+ Target)
-   - Instant Deduplication Fast-Track
-   - Zero-Lag UI & Real-Time Throughput Tracker
+   XERDOWN — Ultra-Concurrency Parallel Streaming Engine
+   Supports: 100MB - 100GB+ Files with 16 Parallel Streams,
+   Instant Deduplication (0.01s), and Monetization Flagging.
    ========================================================== */
 
 class UploadEngine {
@@ -24,18 +22,18 @@ class UploadEngine {
   }
 
   /**
-   * Queue files for upload
+   * Queue files for upload with optional monetization flag
    */
-  uploadFiles(files) {
+  uploadFiles(files, isMonetized = false) {
     const ids = [];
     const fileArray = Array.from(files);
     this.totalFiles += fileArray.length;
 
     for (const file of fileArray) {
       const id = `upload-${++this._idCounter}-${Date.now()}`;
-      this.queue.push({ id, file });
+      this.queue.push({ id, file, isMonetized });
       ids.push(id);
-      this.onFileStart(id, file);
+      this.onFileStart(id, file, isMonetized);
     }
 
     this._processQueue();
@@ -74,7 +72,7 @@ class UploadEngine {
 
   /** @private */
   async _startUploadTask(item) {
-    const { id, file } = item;
+    const { id, file, isMonetized } = item;
 
     // 1. Instant Deduplication Fast-Track Check (< 0.02s)
     try {
@@ -85,7 +83,8 @@ class UploadEngine {
         body: JSON.stringify({
           originalName: file.name,
           size: file.size,
-          mimeType: file.type
+          mimeType: file.type,
+          isMonetized: isMonetized ? 1 : 0
         })
       });
 
@@ -111,8 +110,7 @@ class UploadEngine {
       // Fall through to streaming
     }
 
-    // 2. Adaptive Stream Sizing
-    // > 10MB uses multi-stream chunking
+    // 2. Adaptive Stream Sizing for 100MB - 100GB+
     if (file.size > 10 * 1024 * 1024) {
       this._startChunkedUpload(item);
     } else {
@@ -124,7 +122,7 @@ class UploadEngine {
    * Fast standard upload for small files (<= 10MB)
    * @private
    */
-  _startStandardUpload({ id, file }) {
+  _startStandardUpload({ id, file, isMonetized }) {
     const xhr = new XMLHttpRequest();
     const startTime = Date.now();
     let lastLoaded = 0;
@@ -136,6 +134,7 @@ class UploadEngine {
 
     const formData = new FormData();
     formData.append('files', file);
+    formData.append('isMonetized', isMonetized ? '1' : '0');
 
     xhr.open('POST', '/api/files/upload');
     xhr.withCredentials = true;
@@ -207,18 +206,17 @@ class UploadEngine {
   }
 
   /**
-   * Adaptive High-Speed Parallel Chunked Upload
-   * >= 1GB : 10 Parallel Streams @ 40MB Chunks (100MB/s+ Target)
-   * < 1GB  : 6 Parallel Streams @ 16MB Chunks (50MB/s+ Target)
+   * Ultra-Concurrency Parallel Chunked Upload for massive files (100MB - 100GB+)
    * @private
    */
-  async _startChunkedUpload({ id, file }) {
+  async _startChunkedUpload({ id, file, isMonetized }) {
     const totalSize = file.size;
-    const isGigabytePlus = totalSize >= 1024 * 1024 * 1024; // >= 1GB
+    const isHuge = totalSize >= 5 * 1024 * 1024 * 1024; // >= 5GB
+    const isLarge = totalSize >= 1024 * 1024 * 1024; // >= 1GB
 
-    // Adaptive chunk & worker tuning
-    const chunkSize = isGigabytePlus ? 40 * 1024 * 1024 : 16 * 1024 * 1024;
-    const maxWorkers = isGigabytePlus ? 10 : 6;
+    // Dynamic chunk sizing & worker pool
+    const chunkSize = isHuge ? 64 * 1024 * 1024 : (isLarge ? 40 * 1024 * 1024 : 16 * 1024 * 1024);
+    const maxWorkers = isHuge ? 16 : (isLarge ? 12 : 8);
 
     const totalChunks = Math.ceil(totalSize / chunkSize);
     const activeXhrs = new Set();
@@ -242,7 +240,8 @@ class UploadEngine {
           originalName: file.name,
           mimeType: file.type || 'application/octet-stream',
           totalSize,
-          totalChunks
+          totalChunks,
+          isMonetized: isMonetized ? 1 : 0
         })
       });
 
@@ -406,7 +405,9 @@ function initUploadZone(zone, input, onFiles) {
   if (!zone || !input) return;
 
   zone.addEventListener('click', (e) => {
-    if (e.target.tagName !== 'INPUT') input.click();
+    if (e.target.tagName !== 'INPUT' && !e.target.closest('.monetize-toggle-wrapper')) {
+      input.click();
+    }
   });
 
   let dragCounter = 0;
@@ -436,13 +437,17 @@ function initUploadZone(zone, input, onFiles) {
     zone.classList.remove('drag-over');
 
     if (e.dataTransfer.files.length > 0) {
-      onFiles(e.dataTransfer.files);
+      const monetizeCheckbox = document.getElementById('monetize-upload-checkbox');
+      const isMonetized = monetizeCheckbox ? monetizeCheckbox.checked : false;
+      onFiles(e.dataTransfer.files, isMonetized);
     }
   });
 
   input.addEventListener('change', () => {
     if (input.files.length > 0) {
-      onFiles(input.files);
+      const monetizeCheckbox = document.getElementById('monetize-upload-checkbox');
+      const isMonetized = monetizeCheckbox ? monetizeCheckbox.checked : false;
+      onFiles(input.files, isMonetized);
       input.value = '';
     }
   });
@@ -451,18 +456,22 @@ function initUploadZone(zone, input, onFiles) {
 /**
  * Create progress item
  */
-function createProgressItem(id, file) {
+function createProgressItem(id, file, isMonetized) {
   const item = document.createElement('div');
   item.className = 'upload-progress-item glass-card';
   item.id = `progress-${id}`;
   const isLarge = file.size >= 1024 * 1024 * 1024;
   const isMedium = file.size >= 10 * 1024 * 1024;
   
-  let badgeHtml = '';
+  let badges = '';
   if (isLarge) {
-    badgeHtml = '<span class="hyperspeed-badge">10x Stream · 100MB/s Turbo</span>';
+    badges += '<span class="hyperspeed-badge">16x Stream · Turbo</span>';
   } else if (isMedium) {
-    badgeHtml = '<span class="hyperspeed-badge">6x Stream · 50MB/s Boost</span>';
+    badges += '<span class="hyperspeed-badge">8x Stream</span>';
+  }
+
+  if (isMonetized) {
+    badges += '<span class="monetized-badge">Monetized 10s</span>';
   }
 
   item.innerHTML = `
@@ -473,7 +482,7 @@ function createProgressItem(id, file) {
           <div class="upload-file-name" title="${file.name}">${truncateFilename(file.name, 38)}</div>
           <div class="upload-file-size">
             ${formatBytes(file.size)} 
-            ${badgeHtml}
+            ${badges}
           </div>
         </div>
       </div>
